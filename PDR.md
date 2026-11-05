@@ -97,7 +97,7 @@ Build route layouts and forms in the UI phase. Wire real session checks, account
 | `knowledge_articles` | id, crop, problem, signs, distinguishing_questions, approved_actions, reviewer, reviewed_at |
 | `follow_ups` | id, conversation_id, farmer_observation, outcome, created_at |
 
-Exact auth tables depend on the authentication implementation selected in the backend phase. Use migrations and indexes on `user_id`, `conversation_id`, and recent timestamps.
+Better Auth will own the authentication tables required by its configured database adapter. Keep app-specific profile fields and chat data separate from its core auth records. Use migrations and indexes on `user_id`, `conversation_id`, and recent timestamps.
 
 ## 7. Proposed server endpoints
 
@@ -110,7 +110,7 @@ Exact auth tables depend on the authentication implementation selected in the ba
 | `POST /api/conversations/[id]/messages` | Save a message and obtain the AI response |
 | `POST /api/conversations/[id]/follow-ups` | Record a later outcome |
 
-Auth endpoints depend on the chosen auth solution. All protected endpoints must derive the user from the server-side session, not a client-supplied user ID.
+Better Auth handles authentication endpoints. All protected app endpoints must derive the user from its server-side session, not a client-supplied user ID.
 
 ## 8. Quality and acceptance criteria
 
@@ -132,8 +132,8 @@ Auth endpoints depend on the chosen auth solution. All protected endpoints must 
 
 ## 10. Open decisions
 
-- Authentication library/provider and email delivery method.
-- PostgreSQL hosting provider.
+- Better Auth email/password configuration and email delivery method.
+- PostgreSQL hosting provider and connection requirements; `DATABASE_URL` is already set locally.
 - Whether photos are retained indefinitely or deleted after a defined period.
 - Who reviews agricultural guidance and translations before pilot release.
 - Exact Gemini model and quota, selected when implementation begins.

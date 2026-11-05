@@ -4,8 +4,8 @@ Tasks are ordered so the interface is designed and demonstrated before backend s
 
 ## Phase 1 — UI foundation
 
-- [ ] Create a Next.js App Router project with TypeScript and Tailwind CSS.
-- [ ] Initialize shadcn/ui, CSS-variable themes, icon set, and a system/light/dark theme provider.
+- [x] Create a Next.js App Router project with TypeScript and Tailwind CSS.
+- [ ] Initialize shadcn/ui, CSS-variable themes, icon set, and a system/light/dark theme provider. Confirm shadcn/ui initialization by adding `components.json` and the first component; it is not yet visible in the project files.
 - [ ] Implement the colour, typography, spacing, and focus styles in `designsystem.md`.
 - [ ] Add `/`, `/login`, `/signup`, `/chat`, and `/chat/[id]` route shells. During the UI-only phase, use a clearly labelled mock session or local preview route; wire actual redirect/session rules in Phase 2.
 - [ ] Build responsive login and signup forms with links between them and visible validation states.
@@ -20,9 +20,10 @@ Tasks are ordered so the interface is designed and demonstrated before backend s
 
 ## Phase 2 — Database and authentication
 
-- [ ] Choose a Postgres host and authentication solution; document the choice and required environment variables.
-- [ ] Configure Drizzle, schema, migrations, and a local development database.
-- [ ] Implement signup, login, logout, session persistence, and secure password handling through the chosen auth solution.
+- [x] Install Drizzle ORM, Drizzle Kit, PostgreSQL driver, and Better Auth packages; set a local `DATABASE_URL`.
+- [ ] Confirm the Postgres host and document the required environment variables without committing secrets.
+- [ ] Configure Drizzle, schema, migrations, and database connection.
+- [ ] Configure Better Auth with the database adapter and implement signup, login, logout, and session persistence.
 - [ ] Make `/` redirect by session state; protect `/chat` and `/chat/[id]`.
 - [ ] Persist conversations and messages; replace mock history with user-owned records.
 - [ ] Add authorization checks to every conversation operation and verify cross-user access is denied.

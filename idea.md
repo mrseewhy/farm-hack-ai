@@ -23,6 +23,7 @@ There are no public marketing pages. Visiting `/` sends an unauthenticated visit
 | App | Next.js with TypeScript and App Router | UI, routing, and server endpoints |
 | UI | Tailwind CSS and shadcn/ui | Accessible components and styling |
 | Data | PostgreSQL and Drizzle ORM | Users, conversations, messages, crop reports, follow-ups |
+| Authentication | Better Auth | Accounts, sessions, and protected chat routes |
 | Images | Cloudinary | Crop photo upload, delivery, and deletion |
 | AI | Gemini API | Multimodal chat and preliminary photo interpretation |
 | Translation | Google Cloud Translation API, optional | Fallback or comparison for supported written languages after quality testing |
@@ -33,7 +34,7 @@ There are no public marketing pages. Visiting `/` sends an unauthenticated visit
 2. **Cloudinary Upload/Media API**: Upload crop photos through a server-controlled or signed flow; save `public_id` and delivery URL in Postgres. Keep secrets server-side: https://cloudinary.com/documentation/image_upload_api_reference.
 3. **Google Cloud Translation API (optional)**: Translate or compare written Yoruba (`yo`), Hausa (`ha`), and Igbo (`ig`) output if native-speaker testing finds a need. Hausa and Igbo support is marked experimental, so do not trust it without review: https://docs.cloud.google.com/translate/docs/languages and https://cloud.google.com/products/translate/pricing.
 4. **PostgreSQL**: Database service, accessed through Drizzle. Drizzle is a library, not an external API. Choose a hosted provider during backend setup; keep the connection string server-side.
-5. **Authentication**: Implement email/password or a chosen auth provider during the backend phase. The login and signup UI can be built first, but real sessions, password handling, and protected routes must be complete before a live pilot.
+5. **Better Auth**: The package is installed. Configure email/password authentication, its database adapter/schema, sessions, and protected routes during the backend phase. The login and signup UI can be built first, but real authentication must be complete before a live pilot.
 
 Pl@ntNet is not needed for the tomato-only MVP. It identifies plant species, not the cause of crop damage; reconsider it when the app supports unknown crops.
 
