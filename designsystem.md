@@ -4,6 +4,8 @@
 
 Create a calm, text-first chat interface familiar to users of modern AI chat products. Use original branding and copy. Prioritize legibility, low visual noise, and touch-friendly controls for farmers using phones in varied lighting conditions.
 
+The admin area uses the same tokens and component library, with a denser dashboard layout. Keep farmer and admin navigation separate so a farmer is never shown admin controls.
+
 ## Foundation
 
 - **Framework:** Next.js, Tailwind CSS, shadcn/ui.
@@ -56,6 +58,14 @@ Meet WCAG AA contrast for actual text sizes; adjust token values if testing find
 - Composer stays visible above mobile safe-area inset and adapts when the keyboard opens.
 - Upload previews and action buttons remain touch-friendly (at least 44px targets where practical).
 
+### Admin dashboard
+
+- Desktop: a 240–260px admin sidebar with `Dashboard` and `Guidance` navigation, a top header with page title, theme toggle, and account menu. Main content uses a responsive grid of summary cards above a review queue.
+- Mobile: admin navigation moves to a `Sheet`; cards stack into one column, and review rows remain readable without horizontal scrolling.
+- Initial dashboard empty state explains that metrics and review items appear after farmers submit reports. If mock data is used in the UI phase, label it `Sample data`.
+- Use a restrained warning colour for flagged assessments; show status text alongside colour. Do not use charts without enough data to justify them.
+- Guidance management follows a clear `Draft → In review → Published` status flow, with reviewer and last-updated information visible.
+
 ## Components
 
 Use shadcn/ui components as the base, then style with project tokens:
@@ -73,6 +83,7 @@ Use shadcn/ui components as the base, then style with project tokens:
 | `Skeleton` | Loading history/messages |
 | `Alert`, `Toast` | Errors, retries, and upload feedback |
 | `Dialog` | Confirm destructive history/image actions |
+| `Card`, `Table`, `Badge` | Admin metrics, review queue, and guidance status |
 
 ## States and copy
 
@@ -92,7 +103,7 @@ Use shadcn/ui components as the base, then style with project tokens:
 
 ## UI acceptance checklist
 
-- Root, login, signup, empty chat, active chat, history selection, and mobile drawer look coherent in both themes.
+- Root, login, signup, empty chat, active chat, history selection, admin dashboard, and mobile drawers look coherent in both themes.
 - Composer starts centred in an empty chat and appears at the bottom after the conversation begins.
 - History remains accessible on mobile and desktop.
 - Theme preference persists and no flash of the wrong theme appears on load.

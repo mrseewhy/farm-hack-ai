@@ -11,10 +11,11 @@ Help Nigerian farmers notice crop problems early, understand possible causes, an
 - Farmers can describe symptoms in a chat and attach crop photos.
 - The assistant explains visible signs, possible causes, what to inspect next, practical actions, and when to seek an agricultural extension worker.
 - Users can return to previous conversations from a sidebar.
+- Two roles: `farmer` and `admin`. Public signup creates farmers only. Administrators are provisioned through a trusted server-side process.
 
 ## Product experience
 
-There are no public marketing pages. Visiting `/` sends an unauthenticated visitor to `/login` and an authenticated user to `/chat`. Login links to signup. The signed-in default view is a simple chat interface: conversation history on the left, a centred empty-state composer, and messages that fill the conversation area while the composer settles at the bottom as the conversation grows. A light/dark theme toggle is always accessible.
+There are no public marketing pages. Visiting `/` sends an unauthenticated visitor to `/login`, a farmer to `/chat`, and an admin to `/admin/dashboard`. Login links to signup, which creates farmer accounts only. The farmer's default view is a simple chat interface: conversation history on the left, a centred empty-state composer, and messages that fill the conversation area while the composer settles at the bottom as the conversation grows. Admins use a separate dashboard for operational oversight and reviewed crop guidance. Both areas have a light/dark theme toggle.
 
 ## Technology choices
 
@@ -34,7 +35,7 @@ There are no public marketing pages. Visiting `/` sends an unauthenticated visit
 2. **Cloudinary Upload/Media API**: Upload crop photos through a server-controlled or signed flow; save `public_id` and delivery URL in Postgres. Keep secrets server-side: https://cloudinary.com/documentation/image_upload_api_reference.
 3. **Google Cloud Translation API (optional)**: Translate or compare written Yoruba (`yo`), Hausa (`ha`), and Igbo (`ig`) output if native-speaker testing finds a need. Hausa and Igbo support is marked experimental, so do not trust it without review: https://docs.cloud.google.com/translate/docs/languages and https://cloud.google.com/products/translate/pricing.
 4. **PostgreSQL**: Database service, accessed through Drizzle. Drizzle is a library, not an external API. Choose a hosted provider during backend setup; keep the connection string server-side.
-5. **Better Auth**: The package is installed. Configure email/password authentication, its database adapter/schema, sessions, and protected routes during the backend phase. The login and signup UI can be built first, but real authentication must be complete before a live pilot.
+5. **Better Auth**: The package is installed. Configure email/password authentication, its database adapter/schema, sessions, and role-aware protected routes during the backend phase. Signup must assign `farmer` on the server; never accept `admin` from a public form. The login and signup UI can be built first, but real authentication must be complete before a live pilot.
 
 Pl@ntNet is not needed for the tomato-only MVP. It identifies plant species, not the cause of crop damage; reconsider it when the app supports unknown crops.
 
@@ -45,3 +46,4 @@ Pl@ntNet is not needed for the tomato-only MVP. It identifies plant species, not
 - Let farmers choose their language; validate terminology with native speakers.
 - Minimize stored personal and location data, and make image retention clear.
 - Build the chat UI first, then connect auth, persistence, uploads, and AI in that order.
+- Build the farmer UI and admin shell in the first UI phase, then connect real roles and data. Admins are created only through a trusted setup path, and all admin actions require server-side authorization.
