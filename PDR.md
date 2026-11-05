@@ -127,7 +127,7 @@ Build route layouts and forms in the UI phase. Wire real session checks, account
 | `follow_ups` | id, conversation_id, farmer_observation, outcome, created_at |
 | `admin_audit_events` | id, admin_id, action, target_type, target_id, created_at |
 
-Better Auth will own the authentication tables required by its configured database adapter. Place the role in a trusted server-managed user field or linked profile table, depending on the chosen Better Auth setup. Keep chat data separate from core auth records. Use migrations and indexes on `user_id`, `conversation_id`, and recent timestamps.
+Better Auth owns the authentication tables in PostgreSQL. Its user record stores `role` as a server-owned field and `preferredLanguage` as an account preference. The auth migration is stored in `better-auth_migrations/`. Keep chat data separate from core auth records. Use migrations and indexes on `user_id`, `conversation_id`, and recent timestamps.
 
 ## 8. Proposed server endpoints
 

@@ -16,7 +16,7 @@ function subscribe(callback: () => void) {
   window.addEventListener("storage", callback);
   return () => { window.removeEventListener(eventName, callback); window.removeEventListener("storage", callback); };
 }
-export function usePreferredLanguage() {
+export function usePreferredLanguage(): Language {
   return useSyncExternalStore(subscribe, read, () => "English");
 }
 export function setPreferredLanguage(value: Language) {

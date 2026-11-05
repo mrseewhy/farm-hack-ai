@@ -35,7 +35,7 @@ There are no public marketing pages. Visiting `/` sends an unauthenticated visit
 2. **Cloudinary Upload/Media API**: Upload crop photos through a server-controlled or signed flow; save `public_id` and delivery URL in Postgres. Keep secrets server-side: https://cloudinary.com/documentation/image_upload_api_reference.
 3. **Google Cloud Translation API (optional)**: Translate or compare written Yoruba (`yo`), Hausa (`ha`), and Igbo (`ig`) output if native-speaker testing finds a need. Hausa and Igbo support is marked experimental, so do not trust it without review: https://docs.cloud.google.com/translate/docs/languages and https://cloud.google.com/products/translate/pricing.
 4. **PostgreSQL**: Database service, accessed through Drizzle. Drizzle is a library, not an external API. Choose a hosted provider during backend setup; keep the connection string server-side.
-5. **Better Auth**: The package is installed. Configure email/password authentication, its database adapter/schema, sessions, and role-aware protected routes during the backend phase. Signup must assign `farmer` on the server; never accept `admin` from a public form. The login and signup UI can be built first, but real authentication must be complete before a live pilot.
+5. **Better Auth**: Email/password authentication and sessions are connected to PostgreSQL. Signup stores preferred language on the user account, and the server assigns the `farmer` role. Chat uses that account preference as its default language. Admin accounts still require a trusted provisioning path.
 
 Pl@ntNet is not needed for the tomato-only MVP. It identifies plant species, not the cause of crop damage; reconsider it when the app supports unknown crops.
 

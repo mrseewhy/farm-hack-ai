@@ -18,7 +18,7 @@ Tasks are ordered so the interface is designed and demonstrated before backend s
 - [ ] **Ongoing — Add a basic `/admin/guidance` UI shell for draft, review, and published guidance states.** Done criteria: The guidance page displays draft, review, and published states in a usable shell.
 - [ ] **Todo — Verify light/dark theme persistence, mobile keyboard layout, long translated text, keyboard navigation, and responsive widths.** Done criteria: Phone and desktop layouts, keyboard use, language wrapping, and both themes pass visual review.
 
-- [ ] **Ongoing — Add signup language selection and Profile & settings UI.** Done criteria: Signup includes the language choice; `/profile` exposes language and password settings on desktop and mobile.
+- [x] **Done — Add signup language selection and Profile & settings UI.** Done criteria: Signup includes the language choice; `/profile` exposes language and password settings on desktop and mobile.
 
 **Phase 1 done when:** the auth, chat, profile, and admin screens are coherent on desktop and phone widths in both themes. Empty states contain no invented user data.
 
@@ -27,11 +27,11 @@ Tasks are ordered so the interface is designed and demonstrated before backend s
 - [x] **Done — Install Drizzle ORM, Drizzle Kit, PostgreSQL driver, and Better Auth packages; set a local `DATABASE_URL`.** Done criteria: All four packages and a non-committed `DATABASE_URL` are present.
 - [ ] **Todo — Confirm the Postgres host and document the required environment variables without committing secrets.** Done criteria: The Postgres host and environment variable names are recorded without credential values.
 - [ ] **Todo — Configure Drizzle, schema, migrations, and database connection.** Done criteria: Drizzle can connect and run a migration against the configured database.
-- [ ] **Todo — Configure Better Auth with the database adapter and implement signup, login, logout, and session persistence.** Done criteria: Better Auth can register, sign in, sign out, and restore sessions after reload.
-- [ ] **Todo — Persist preferred language on the account and implement password changes.** Done criteria: The signup choice survives sign-in on another device, profile changes update it, and a valid current password can be changed securely.
-- [ ] **Todo — Make public signup assign the `farmer` role on the server, regardless of client input.** Done criteria: A forged `role=admin` signup request still creates a farmer.
+- [x] **Done — Configure Better Auth and implement signup, login, logout, and session persistence.** Done criteria: Better Auth can register, sign in, sign out, and restore sessions after reload; the auth migration has been applied.
+- [x] **Done — Persist preferred language on the account and implement password changes.** Done criteria: Signup stores the choice in PostgreSQL, profile changes update it, chat loads it from the session, and the new password works after a change.
+- [x] **Done — Make public signup assign the `farmer` role on the server, regardless of client input.** Done criteria: A forged `role=admin` signup request still creates a farmer.
 - [ ] **Todo — Provision the first admin through a trusted server-side procedure; do not expose public admin registration.** Done criteria: An admin is created through a documented trusted procedure with no public admin signup.
-- [ ] **Todo — Make `/` redirect by session role; protect `/chat`, `/chat/[id]`, `/admin/dashboard`, and admin APIs.** Done criteria: Each role reaches only its permitted routes and APIs; `/` redirects by role.
+- [ ] **Ongoing — Make `/` redirect by session role; protect `/chat`, `/chat/[id]`, `/admin/dashboard`, and admin APIs.** Done criteria: Each role reaches only its permitted routes and APIs; `/` redirects by role. Root, chat, dashboard, and guidance guards are implemented; saved chats and admin APIs remain.
 - [ ] **Todo — Persist conversations and messages; replace mock history with user-owned records.** Done criteria: Chats and messages survive reload and are listed only for their owner.
 - [ ] **Todo — Add authorization checks to every conversation operation and verify cross-user access is denied.** Done criteria: A second user cannot read or mutate another user’s conversation.
 - [ ] **Todo — Implement admin overview data and review queue with aggregate-first data access and audit events for individual-report access.** Done criteria: Admin metrics and queue use real data; individual report access produces an audit event.
