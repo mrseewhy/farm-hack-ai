@@ -41,11 +41,13 @@ Meet WCAG AA contrast for actual text sizes; adjust token values if testing find
 - `/login` and `/signup` use a centred form panel on a plain background; no marketing content.
 - Form width around 400px on desktop, full-width with safe padding on mobile.
 - Each screen includes page title, labelled inputs, primary submit button, error area, and a clear link to the other auth screen.
+- Signup includes a preferred language selector for English, Yoruba, Hausa, and Igbo.
 - Theme toggle appears in the top-right.
 
 ### Chat, desktop
 
 - Left sidebar around 260–280px wide, full height. Include product mark/name, `New chat`, recent conversations, theme toggle, and account/logout area.
+- Account area includes a Profile & settings link above the sign-in/sign-out action. Profile has language and password sections.
 - Main panel fills remaining width. The conversation content has a centred maximum width and ample side padding.
 - Empty state places the introduction and composer around the vertical centre of the main panel.
 - Active state shows message list above a sticky bottom composer. Auto-scroll to the newest message unless the user has scrolled upward.
@@ -92,7 +94,7 @@ Use shadcn/ui components as the base, then style with project tokens:
 - **Thinking:** non-jarring loading indicator and status text.
 - **Uncertain result:** say what is visible, what is only a possibility, and what extra information would help.
 - **Error:** explain what failed and offer retry without erasing the draft.
-- **No history:** simple message and `New chat` action.
+- **No history:** simple empty message and `New chat` action. Do not populate a new account with invented conversations.
 
 ## Accessibility and localization
 

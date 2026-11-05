@@ -7,18 +7,20 @@ Tasks are ordered so the interface is designed and demonstrated before backend s
 - [x] **Done — Create a Next.js App Router project with TypeScript and Tailwind CSS.** Done criteria: Next.js, TypeScript, and Tailwind are present and a production build succeeds.
 - [x] **Done — Initialize shadcn/ui, theme tokens, icons, and theme toggle.** Done criteria: `components.json` and shadcn components exist; light/dark variables and theme control work.
 - [ ] **Ongoing — Implement the colour, typography, spacing, and focus styles in `designsystem.md`.** Done criteria: Both themes use the documented palette, readable typography, spacing, and visible focus.
-- [x] **Done — Add `/`, `/login`, `/signup`, `/chat`, and `/chat/[id]` route shells.** Done criteria: All five routes render and `/` redirects to `/login` in the UI preview.
+- [ ] **Ongoing — Add `/`, `/login`, `/signup`, `/chat`, and `/chat/[id]` route shells.** Done criteria: The public routes render, `/` redirects by session, and saved chat IDs load their conversations.
 - [ ] **Ongoing — Build responsive login and signup forms with links between them and visible validation states.** Done criteria: Both forms render at phone and desktop widths, validate required fields, and cross-link.
-- [ ] **Ongoing — Build the desktop sidebar with `New chat`, grouped mock history, selected-chat state, theme toggle, and account area.** Done criteria: New chat and grouped history are selectable in the desktop sidebar.
+- [ ] **Ongoing — Build the desktop sidebar with `New chat`, saved history, theme toggle, and account area.** Done criteria: New chat works, real saved history is selectable, and Profile & settings is accessible.
 - [ ] **Ongoing — Build the mobile header and history drawer with accessible focus behaviour.** Done criteria: The mobile drawer opens, traps focus, and closes after navigation.
 - [ ] **Ongoing — Build the empty chat state with centred introduction, language selector, photo attachment control, and composer.** Done criteria: The empty state centres the prompt and composer and exposes language and photo controls.
 - [ ] **Ongoing — Build the active conversation state with user/assistant messages, bottom composer, auto-scroll behaviour, and loading/error/retry states.** Done criteria: After send, messages appear above the bottom composer; latest content stays visible and failures can be retried.
-- [ ] **Ongoing — Add mock crop assessment cards or sections for observed signs, possible causes, follow-up questions, actions, and uncertainty.** Done criteria: Sample assessment displays all required fields and is labelled as sample guidance.
+- [ ] **Todo — Add crop assessment sections for observed signs, possible causes, follow-up questions, actions, and uncertainty.** Done criteria: A real assessment displays all required fields and its uncertainty clearly.
 - [ ] **Ongoing — Build `/admin/dashboard` shell with separate admin navigation, summary cards, review queue, empty/sample states, theme toggle, and responsive mobile drawer.** Done criteria: The admin dashboard renders navigation, metrics, queue, empty states, theme control, and mobile layout.
 - [ ] **Ongoing — Add a basic `/admin/guidance` UI shell for draft, review, and published guidance states.** Done criteria: The guidance page displays draft, review, and published states in a usable shell.
 - [ ] **Todo — Verify light/dark theme persistence, mobile keyboard layout, long translated text, keyboard navigation, and responsive widths.** Done criteria: Phone and desktop layouts, keyboard use, language wrapping, and both themes pass visual review.
 
-**Phase 1 done when:** a reviewer can navigate auth screens, demonstrate the farmer chat flow, and inspect the admin dashboard and guidance shell on desktop and phone widths, in both themes. Mock data is labelled.
+- [ ] **Ongoing — Add signup language selection and Profile & settings UI.** Done criteria: Signup includes the language choice; `/profile` exposes language and password settings on desktop and mobile.
+
+**Phase 1 done when:** the auth, chat, profile, and admin screens are coherent on desktop and phone widths in both themes. Empty states contain no invented user data.
 
 ## Phase 2 — Database and authentication
 
@@ -26,6 +28,7 @@ Tasks are ordered so the interface is designed and demonstrated before backend s
 - [ ] **Todo — Confirm the Postgres host and document the required environment variables without committing secrets.** Done criteria: The Postgres host and environment variable names are recorded without credential values.
 - [ ] **Todo — Configure Drizzle, schema, migrations, and database connection.** Done criteria: Drizzle can connect and run a migration against the configured database.
 - [ ] **Todo — Configure Better Auth with the database adapter and implement signup, login, logout, and session persistence.** Done criteria: Better Auth can register, sign in, sign out, and restore sessions after reload.
+- [ ] **Todo — Persist preferred language on the account and implement password changes.** Done criteria: The signup choice survives sign-in on another device, profile changes update it, and a valid current password can be changed securely.
 - [ ] **Todo — Make public signup assign the `farmer` role on the server, regardless of client input.** Done criteria: A forged `role=admin` signup request still creates a farmer.
 - [ ] **Todo — Provision the first admin through a trusted server-side procedure; do not expose public admin registration.** Done criteria: An admin is created through a documented trusted procedure with no public admin signup.
 - [ ] **Todo — Make `/` redirect by session role; protect `/chat`, `/chat/[id]`, `/admin/dashboard`, and admin APIs.** Done criteria: Each role reaches only its permitted routes and APIs; `/` redirects by role.

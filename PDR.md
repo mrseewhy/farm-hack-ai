@@ -50,6 +50,7 @@ Admin journey: an admin signs in through the same login page, lands on `/admin/d
 | `/` | Redirect to `/login` without a session, `/chat` for farmers, `/admin/dashboard` for admins |
 | `/login` | Login form with link to `/signup` |
 | `/signup` | Signup form with link to `/login` |
+| `/profile` | Signed-in user's profile, preferred language, and password settings |
 | `/chat` | Protected default new-chat view |
 | `/chat/[id]` | Protected saved conversation belonging to the user |
 | `/admin/dashboard` | Protected admin overview; farmers receive an access-denied response or redirect to `/chat` |
@@ -62,6 +63,8 @@ Build route layouts and forms in the UI phase. Wire real session checks, account
 ### Authentication
 
 - Users can sign up, log in, and log out.
+- Farmer signup includes preferred language. The account preference can also be changed later in `/profile`.
+- Signed-in users can change their password after confirming the current password.
 - Forms show validation and actionable errors.
 - Session state determines root redirect and access to chat routes.
 - A user cannot read another user's chats or images.
@@ -79,6 +82,7 @@ Build route layouts and forms in the UI phase. Wire real session checks, account
 ### Chat layout and interaction
 
 - Desktop sidebar contains product name, `New chat`, conversation list grouped by recency, and account/theme controls.
+- The account area links to Profile & settings, including language and password settings.
 - Mobile sidebar becomes an accessible drawer; the chat and composer use the available screen width.
 - Empty chat has a vertically centred introduction and composer.
 - After the first message, messages occupy a scrollable central column and the composer is anchored near the bottom with safe spacing for mobile keyboards.

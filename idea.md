@@ -15,7 +15,7 @@ Help Nigerian farmers notice crop problems early, understand possible causes, an
 
 ## Product experience
 
-There are no public marketing pages. Visiting `/` sends an unauthenticated visitor to `/login`, a farmer to `/chat`, and an admin to `/admin/dashboard`. Login links to signup, which creates farmer accounts only. The farmer's default view is a simple chat interface: conversation history on the left, a centred empty-state composer, and messages that fill the conversation area while the composer settles at the bottom as the conversation grows. Admins use a separate dashboard for operational oversight and reviewed crop guidance. Both areas have a light/dark theme toggle.
+There are no public marketing pages. Visiting `/` sends an unauthenticated visitor to `/login`, a farmer to `/chat`, and an admin to `/admin/dashboard`. Login links to signup, which creates farmer accounts only and asks for preferred language. The farmer's default view is a simple chat interface: conversation history on the left, a centred empty-state composer, and messages that fill the conversation area while the composer settles at the bottom as the conversation grows. Profile settings let users update their language and password. Admins use a separate dashboard for operational oversight and reviewed crop guidance. Both areas have a light/dark theme toggle.
 
 ## Technology choices
 
