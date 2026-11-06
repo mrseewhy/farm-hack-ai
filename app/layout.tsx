@@ -4,6 +4,10 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "FarmHack AI",
   description: "Clear crop guidance for farmers",
+  icons: {
+    icon: "/favicon.svg",
+    apple: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

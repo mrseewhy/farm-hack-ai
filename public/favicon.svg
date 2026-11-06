@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="farmhack-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#236b45;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1d5a38;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="8" fill="url(#farmhack-gradient)" />
+  <g fill="#ffffff">
+    <path d="M16 2a6 6 0 0 0-6 6v2a6 6 0 0 0 12 0V8a6 6 0 0 0-6-6Z" />
+    <path d="M10 12a4 4 0 0 0-4 4v2a4 4 0 0 0 8 0v-2a4 4 0 0 0-4-4Z" />
+    <path d="M16 24a2 2 0 0 0-2 2v1a2 2 0 0 0 4 0v-1a2 2 0 0 0-2-2Z" />
+    <circle cx="16" cy="14" r="1" fill="#ffffff" />
+  </g>
+</svg>
