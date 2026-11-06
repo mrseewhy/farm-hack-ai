@@ -29,35 +29,40 @@ export default async function SavedChatPage({
     redirect("/chat");
   }
 
-  // Parse the stored assessment and attach it to the assistant message so the
-  // structured observation/cause/action sections render after a reload.
-  const assessmentRecord = conversation.assessment;
-  let parsedAssessment: Message["assessment"] | null = null;
-  if (assessmentRecord) {
+  // Parse every stored assessment for this conversation so structured results
+  // for all turns are restored on reload, not just the latest one.
+  const assessmentRecords = conversation.assessments ?? [];
+  const parsedAssessments = new Map<number, Message["assessment"]>();
+  for (const record of assessmentRecords) {
     try {
-      parsedAssessment = JSON.parse(
-        assessmentRecord.structuredResult
-      ) as Message["assessment"];
+      parsedAssessments.set(
+        record.messageId,
+        JSON.parse(record.structuredResult) as Message["assessment"]
+      );
     } catch {
-      parsedAssessment = null;
+      // Skip malformed records.
     }
   }
 
   const messages: Message[] = [];
-  let lastAssistantIndex = -1;
-  (conversation.messages ?? []).forEach((m) => {
+  const rawMessages = conversation.messages ?? [];
+  rawMessages.forEach((m, index) => {
     const message = {
       ...m,
       role: m.role as "user" | "assistant",
     } as Message;
-    if (message.role === "assistant") {
-      lastAssistantIndex = messages.length;
-    }
     messages.push(message);
+    // Attach each saved assessment to the assistant reply that answered the
+    // assessed user message (identified by assessment.messageId). This keeps
+    // the structured sections aligned with the correct reply in longer chats.
+    if (
+      message.role === "assistant" &&
+      index > 0 &&
+      parsedAssessments.has(rawMessages[index - 1]?.id)
+    ) {
+      message.assessment = parsedAssessments.get(rawMessages[index - 1]!.id)!;
+    }
   });
-  if (lastAssistantIndex !== -1 && parsedAssessment) {
-    messages[lastAssistantIndex].assessment = parsedAssessment;
-  }
 
   const initialConversation = {
     id: conversation.id,

@@ -14,6 +14,12 @@ function getGenAI() {
 
 const MODEL_NAME = "gemini-1.5-flash";
 
+// Fetch timeout and size cap for images sent to the model. Cloudinary images
+// are already transformed to a bounded size, but a stalled or oversized
+// response must not hold the request or consume unbounded memory.
+const IMAGE_FETCH_TIMEOUT_MS = 20_000;
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10MB
+
 /**
  * Structured crop assessment schema that Gemini must follow.
  * These fields match what the chat UI renders for farmers.
@@ -278,6 +284,37 @@ Respond in ${language} when possible.
  * Accepts text symptoms, image URLs, language, and optional guidance context.
  * Applies safeguards to remove unsafe content before returning.
  */
+/**
+ * Fetch an image from its URL and return it as Gemini inline data (base64 + mimeType).
+ * Throws if the image cannot be retrieved.
+ */
+async function imageToInlineData(secureUrl: string) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), IMAGE_FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(secureUrl, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status}`);
+    }
+
+    const contentLength = response.headers.get("content-length");
+    if (contentLength && Number(contentLength) > MAX_IMAGE_BYTES) {
+      throw new Error("Image too large for analysis");
+    }
+
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength > MAX_IMAGE_BYTES) {
+      throw new Error("Image too large for analysis");
+    }
+
+    const base64 = Buffer.from(buffer).toString("base64");
+    const mimeType = response.headers.get("content-type") ?? "image/jpeg";
+    return { inlineData: { data: base64, mimeType } };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export async function assessCropHealth({
   symptoms,
   images,
@@ -303,11 +340,19 @@ export async function assessCropHealth({
     text: `Language: ${language}\nFarmer's description of symptoms:\n${symptoms}\n\nAttachments: ${images.length} image(s)`,
   });
 
-  // Add images as inline data
+  // Add images as real inline image data (not just URLs as text) so the model
+  // receives the actual image bytes for analysis.
   if (images.length > 0) {
-    parts.push({
-      text: `Attached crop photos (${images.length}): ${images.map((img, i) => `Image ${i + 1}: ${img.secureUrl}`).join(", ")}`,
-    });
+    for (const [index, img] of images.entries()) {
+      try {
+        parts.push(await imageToInlineData(img.secureUrl));
+      } catch (error) {
+        console.error(`Failed to attach image ${index + 1} for AI assessment:`, img.secureUrl, error);
+        parts.push({
+          text: `[Attached crop photo ${index + 1} could not be loaded for analysis.]`,
+        });
+      }
+    }
   }
 
   const result = await model.generateContent({

@@ -22,7 +22,7 @@ const MAX_IMAGES_PER_CONVERSATION = 5;
  * Upload a crop photo to Cloudinary.
  * Returns { success, publicId, secureUrl, conversationId } or { error }.
  */
-export async function uploadCropImage(formData: FormData) {
+export async function uploadCropImage(formData: FormData, messageId: number) {
   "use server";
 
   const file = formData.get("file") as File | null;
@@ -81,6 +81,24 @@ export async function uploadCropImage(formData: FormData) {
     };
   }
 
+  // If a messageId is supplied, verify it belongs to this user's conversation
+  // BEFORE uploading to Cloudinary. A failed check must never leave an
+  // orphaned Cloudinary file behind. Conversation ownership was already
+  // established above, so matching the message's conversationId is sufficient.
+  if (messageId) {
+    const message = await db
+      .select({ id: messages.id, conversationId: messages.conversationId })
+      .from(messages)
+      .where(eq(messages.id, messageId))
+      .limit(1);
+    if (message.length === 0) {
+      return { error: "Message not found" };
+    }
+    if (message[0].conversationId !== conversationId) {
+      return { error: "Message does not belong to this conversation" };
+    }
+  }
+
   // Upload to Cloudinary
   try {
     const bytes = await file.arrayBuffer();
@@ -107,11 +125,41 @@ export async function uploadCropImage(formData: FormData) {
         .end(buffer);
     });
 
+    // Bind the verified upload to the message. Ownership was already checked
+    // above, so no Cloudinary file is left behind by a failed access check.
+    let imageId: number | null = null;
+    try {
+      const [image] = await db
+        .insert(messageImages)
+        .values({
+          messageId,
+          cloudinaryPublicId: uploadResult.public_id,
+          secureUrl: uploadResult.secure_url,
+        })
+        .returning();
+      imageId = image.id;
+    } catch (insertError) {
+      // The Cloudinary file is already uploaded; if binding it to the database
+      // fails, delete it so it cannot become an orphan.
+      try {
+        await cloudinary.uploader.destroy(uploadResult.public_id);
+      } catch {
+        // Best-effort cleanup; do not mask the original insert error.
+        console.error(
+          "Failed to delete orphaned Cloudinary file",
+          uploadResult.public_id,
+          insertError
+        );
+      }
+      throw insertError;
+    }
+
     return {
       success: true,
       publicId: uploadResult.public_id,
       secureUrl: uploadResult.secure_url,
       conversationId,
+      imageId,
     };
   } catch (error) {
     console.error("Cloudinary upload error:", error);

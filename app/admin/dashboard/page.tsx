@@ -34,30 +34,66 @@ export default async function AdminDashboard() {
   if (!session) redirect("/login");
   if (session.user.role !== "admin") redirect("/chat");
 
-  const [overview, reviewQueue] = await Promise.all([
-    getAdminOverview().catch(() => ({
-      farmers: 0,
-      conversations: 0,
-      cropReports: 0,
-      needsReview: 0,
-    })),
-    getReviewQueue().catch(() => [] as Array<{
-      id: number;
-      conversationId: number;
-      messageId: number;
-      uncertainty: { level: string; reason: string };
-      observedSigns: string[];
-      possibleCauses: string[];
-      createdAt: Date;
-      model: string;
-    }>),
+  type ReviewQueueItem = {
+    id: number;
+    conversationId: number;
+    messageId: number;
+    uncertainty: { level: string; reason: string };
+    observedSigns: string[];
+    possibleCauses: string[];
+    createdAt: Date;
+    model: string;
+  };
+
+  // Use Promise.allSettled so a database outage does not silently render as
+  // false zeros (which would look like an unused app). Errors are surfaced
+  // instead of being swallowed into empty data.
+  const [overviewResult, reviewQueueResult] = await Promise.allSettled([
+    getAdminOverview(),
+    getReviewQueue(),
   ]);
+
+  let overview = { farmers: 0, conversations: 0, cropReports: 0, needsReview: 0 };
+  let overviewError: string | null = null;
+  if (overviewResult.status === "fulfilled") {
+    overview = overviewResult.value;
+  } else {
+    overviewError =
+      overviewResult.reason instanceof Error
+        ? overviewResult.reason.message
+        : "Failed to load overview metrics.";
+    console.error("Admin overview failed:", overviewResult.reason);
+  }
+
+  let reviewQueue: ReviewQueueItem[] = [];
+  let reviewQueueError: string | null = null;
+  if (reviewQueueResult.status === "fulfilled") {
+    reviewQueue = reviewQueueResult.value;
+  } else {
+    reviewQueueError =
+      reviewQueueResult.reason instanceof Error
+        ? reviewQueueResult.reason.message
+        : "Failed to load review queue.";
+    console.error("Review queue failed:", reviewQueueResult.reason);
+  }
+
+  const dashboardError = overviewError ?? reviewQueueError;
 
   return (
     <AdminShell
       title="Dashboard"
       subtitle="A clear view of crop conversations and guidance quality."
     >
+      {dashboardError && (
+        <div className="mb-6 rounded-lg bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
+          <p className="font-semibold">Data unavailable</p>
+          <p className="mt-1">
+            {dashboardError}. The metrics below may show stale or zero values
+            because of a database error; this does not necessarily mean the app
+            is unused.
+          </p>
+        </div>
+      )}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {metrics.map(({ label, icon: Icon }) => {
           const valueMap: Record<string, number> = {
@@ -143,7 +179,7 @@ export default async function AdminDashboard() {
                           {new Date(item.createdAt).toLocaleDateString()}
                         </span>
                         <Link
-                          href={`/chat/${item.conversationId}`}
+                          href={`/admin/review/${item.conversationId}`}
                           className={cn(
                             buttonVariants({ variant: "outline", size: "sm" }),
                             "text-xs"

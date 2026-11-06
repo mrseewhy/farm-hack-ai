@@ -3,8 +3,7 @@ export {
   getConversations,
   getConversation,
   createMessage,
-  createAssistantMessage,
-  createMessageImages,
+  deleteMessage,
   deleteConversation,
   runAssessment,
 } from "./chat";

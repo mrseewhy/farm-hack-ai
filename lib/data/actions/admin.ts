@@ -179,6 +179,15 @@ export async function updateKnowledgeArticle(id: number, input: KnowledgeArticle
     throw new Error("Cannot update a published article. Create a new version instead.");
   }
 
+  // Publishing must go through publishKnowledgeArticle so a reviewer and
+  // review date are recorded. Direct status changes to "published" are
+  // rejected here to prevent bypassing the guidance review step.
+  if (validated.status === "published") {
+    throw new Error(
+      "Cannot publish through update. Use publishKnowledgeArticle to record a reviewer and review date."
+    );
+  }
+
   const [article] = await db
     .update(knowledgeArticles)
     .set({
@@ -278,29 +287,28 @@ export async function getReviewQueue() {
       createdAt: assessments.createdAt,
     })
     .from(assessments)
-    .orderBy(desc(assessments.createdAt))
-    .limit(50);
+    .where(
+      // Flag medium/high uncertainty at the database level so older reports
+      // needing attention are never hidden behind a fixed-size recent window.
+      sql`(${assessments.structuredResult})::jsonb -> 'uncertainty' ->> 'level' IN ('medium', 'high')`
+    )
+    .orderBy(desc(assessments.createdAt));
 
-  // Filter to high-uncertainty assessments in application code
-  // (Drizzle JSON filtering is database-specific)
   const flagged = results
     .map((row) => {
       try {
         const parsed = JSON.parse(row.structuredResult);
         const uncertainty = parsed.uncertainty ?? {};
-        if (uncertainty.level === "high" || uncertainty.level === "medium") {
-          return {
-            id: row.id,
-            conversationId: row.conversationId,
-            messageId: row.messageId,
-            uncertainty: uncertainty,
-            observedSigns: parsed.observedSigns ?? [],
-            possibleCauses: parsed.possibleCauses ?? [],
-            createdAt: row.createdAt,
-            model: row.model,
-          };
-        }
-        return null;
+        return {
+          id: row.id,
+          conversationId: row.conversationId,
+          messageId: row.messageId,
+          uncertainty: uncertainty,
+          observedSigns: parsed.observedSigns ?? [],
+          possibleCauses: parsed.possibleCauses ?? [],
+          createdAt: row.createdAt,
+          model: row.model,
+        };
       } catch {
         return null;
       }
@@ -412,6 +420,19 @@ export async function recordFollowUp(input: {
     throw new Error("Conversation not found or access denied");
   }
 
+  // Verify the feedback targets a message that actually belongs to this
+  // conversation, so feedback cannot be attached to a different conversation's
+  // message.
+  const message = await db
+    .select({ id: messages.id, conversationId: messages.conversationId })
+    .from(messages)
+    .where(eq(messages.id, validated.messageId))
+    .limit(1);
+
+  if (message.length === 0 || message[0].conversationId !== validated.conversationId) {
+    throw new Error("Message not found in this conversation");
+  }
+
   const [followUp] = await db
     .insert(followUps)
     .values({
@@ -479,11 +500,11 @@ export async function getAdminOverview() {
   `);
   const cropReports = Number(reportResult.rows[0]?.count ?? 0);
 
-  // Count assessments needing review (high uncertainty)
+  // Count assessments needing review (medium or high uncertainty), matching
+  // the review queue so the dashboard count agrees with the queue.
   const reviewResult = await db.execute(sql`
     SELECT count(*) as count FROM assessments a
-    WHERE (a."structuredResult")::jsonb ->> 'uncertainty' = '{}'
-       OR (a."structuredResult")::jsonb -> 'uncertainty' ->> 'level' = 'high'
+    WHERE (a."structuredResult")::jsonb -> 'uncertainty' ->> 'level' IN ('medium', 'high')
   `);
   const needsReview = Number(reviewResult.rows[0]?.count ?? 0);
 

@@ -22,10 +22,10 @@ export type CreateConversationInput = z.infer<typeof createConversationSchema>;
 export const createMessageSchema = z.object({
   conversationId: z.number().int().positive(),
   // Clients can only create user messages. Assistant messages are written
-  // server-side by the AI pipeline via createAssistantMessage.
+  // server-side by the AI pipeline via runAssessment.
   role: z.enum(["user"]),
-  // Content may be empty for photo-only messages; images are attached
-  // separately through createMessageImages.
+  // Content may be empty for photo-only messages; images are bound to the
+  // message server-side when the photo is uploaded via uploadCropImage.
   content: z.string().max(10000).default(""),
   language: z.enum(["English", "Yoruba", "Hausa", "Igbo"]).default("English"),
   status: z.enum(["pending", "sent", "failed"]).default("pending"),

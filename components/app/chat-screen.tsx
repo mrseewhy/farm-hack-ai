@@ -18,8 +18,7 @@ import {
   getConversations,
   getConversation,
   createMessage,
-  createAssistantMessage,
-  createMessageImages,
+  deleteMessage,
   uploadCropImage,
   deleteConversation,
   runAssessment,
@@ -233,28 +232,30 @@ export function ChatScreen({
         status: "sent",
       });
 
-      // Upload image if present
+      // Upload image if present. The upload and its binding to the message
+      // happen server-side; the caller never supplies Cloudinary IDs directly.
       let imageUrl: string | null = null;
       if (uploadingFile) {
         const formData = new FormData();
         formData.append("file", uploadingFile);
         formData.append("conversationId", String(convId));
 
-        const uploadResult = await uploadCropImage(formData);
+        const uploadResult = await uploadCropImage(formData, userMessage.id);
         if ("error" in uploadResult) {
+          // Roll back the message saved before the upload so a retry does not
+          // leave a duplicate text-only message behind. Keep the draft and photo
+          // so the user can retry the attachment.
+          try {
+            await deleteMessage({ messageId: userMessage.id, conversationId: convId });
+          } catch {
+            // Ignore rollback failures; the upload error is the primary signal.
+          }
           setError(uploadResult.error ?? "Upload failed");
-          // Still show the message without image
+          // Do not assess a photo message without its photo — a photo-only
+          // message would otherwise be assessed against empty evidence.
+          return;
         } else {
           imageUrl = uploadResult.secureUrl;
-
-          // Associate image with message
-          await createMessageImages([
-            {
-              messageId: userMessage.id,
-              cloudinaryPublicId: uploadResult.publicId,
-              secureUrl: uploadResult.secureUrl,
-            },
-          ]);
         }
       }
 
@@ -276,66 +277,41 @@ export function ChatScreen({
       setUploadPreview(null);
 
       // Run AI assessment via server action. Evidence (symptoms + images) is
-      // derived server-side from the stored message and its attachments.
+      // derived server-side from the stored message and its attachments. The
+      // assistant reply is also created server-side, so it cannot be forged by
+      // the caller.
       const assessmentResult = await runAssessment({
         conversationId: convId,
         messageId: userMessage.id,
         language,
       });
 
-      const { assessment } = assessmentResult as { assessment: {
-        observedSigns: string[];
-        possibleCauses: string[];
-        followUpQuestions: string[];
-        immediateActions: string[];
-        whenToSeekHelp: string;
-        uncertainty: { level: "low" | "medium" | "high"; reason: string };
-      } };
+      const { assessment, assistantMessage } = assessmentResult as {
+        assessment: {
+          observedSigns: string[];
+          possibleCauses: string[];
+          followUpQuestions: string[];
+          immediateActions: string[];
+          whenToSeekHelp: string;
+          uncertainty: { level: "low" | "medium" | "high"; reason: string };
+        };
+        assistantMessage: { id: number; content: string };
+      };
 
-      // Build assistant message content from assessment fields
-        const contentParts: string[] = [];
-
-        if (assessment.observedSigns.length > 0) {
-          contentParts.push("**Observed signs:**\n" + assessment.observedSigns.map((s) => `- ${s}`).join("\n"));
-        }
-        if (assessment.possibleCauses.length > 0) {
-          contentParts.push("\n**Possible causes:**\n" + assessment.possibleCauses.map((c) => `- ${c}`).join("\n"));
-        }
-        if (assessment.followUpQuestions.length > 0) {
-          contentParts.push("\n**Things to check:**\n" + assessment.followUpQuestions.map((q) => `- ${q}`).join("\n"));
-        }
-        if (assessment.immediateActions.length > 0) {
-          contentParts.push("\n**Suggested actions:**\n" + assessment.immediateActions.map((a) => `- ${a}`).join("\n"));
-        }
-        if (assessment.whenToSeekHelp) {
-          contentParts.push("\n**When to seek help:**\n" + assessment.whenToSeekHelp);
-        }
-        if (assessment.uncertainty.level !== "low") {
-          contentParts.push(`\n**Uncertainty:** ${assessment.uncertainty.level} — ${assessment.uncertainty.reason}`);
-        }
-
-        const assistantContent = contentParts.join("\n") || "I couldn't generate an assessment. Please try again or describe your symptoms in more detail.";
-
-        const assistantMessage = await createAssistantMessage({
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: assistantMessage.id,
           conversationId: convId,
-          content: assistantContent,
+          role: "assistant",
+          content: assistantMessage.content,
           language,
-        });
-
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: assistantMessage.id,
-            conversationId: convId,
-            role: "assistant",
-            content: assistantContent,
-            language,
-            status: "sent",
-            createdAt: new Date(),
-            images: [],
-            assessment,
-          },
-        ]);
+          status: "sent",
+          createdAt: new Date(),
+          images: [],
+          assessment,
+        },
+      ]);
 
       // Refresh conversation list to update titles
       await loadConversations();

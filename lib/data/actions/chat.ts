@@ -15,14 +15,12 @@ import { eq, desc, and } from "drizzle-orm";
 import {
   createConversationSchema,
   createMessageSchema,
-  createMessageImageSchema,
   conversationListSchema,
   type CreateConversationInput,
   type CreateMessageInput,
-  type CreateMessageImageInput,
   type ConversationListInput,
 } from "@/lib/data/validation";
-import { assessCropHealth } from "@/lib/ai";
+import { assessCropHealth, type AssessmentResult } from "@/lib/ai";
 import { v2 as cloudinary } from "cloudinary";
 
 // Configure Cloudinary
@@ -120,16 +118,16 @@ export async function getConversation(conversationId: number) {
     })
   );
 
-  const assessment = await db
+  const assessmentsList = await db
     .select()
     .from(assessments)
     .where(eq(assessments.conversationId, conversationId))
-    .limit(1);
+    .orderBy(assessments.createdAt);
 
   return {
     ...conversation[0],
     messages: messagesWithImages,
-    assessment: assessment[0] ?? null,
+    assessments: assessmentsList,
   };
 }
 
@@ -183,56 +181,6 @@ export async function createMessage(input: CreateMessageInput) {
     .returning();
 
   return message;
-}
-
-/**
- * Associate Cloudinary images with a message.
- * Only the conversation owner can add images.
- */
-export async function createMessageImages(input: CreateMessageImageInput[]) {
-  const user = await getCurrentUser();
-  const results = [];
-
-  for (const item of input) {
-    const validated = createMessageImageSchema.parse(item);
-
-    // Verify the message belongs to the user's conversation
-    const message = await db
-      .select({
-        id: messages.id,
-        conversationId: messages.conversationId,
-      })
-      .from(messages)
-      .where(eq(messages.id, validated.messageId))
-      .limit(1);
-
-    if (message.length === 0) {
-      throw new Error(`Message ${validated.messageId} not found`);
-    }
-
-    const conversation = await db
-      .select({ userId: conversations.userId })
-      .from(conversations)
-      .where(eq(conversations.id, message[0].conversationId))
-      .limit(1);
-
-    if (conversation.length === 0 || conversation[0].userId !== user.id) {
-      throw new Error("Access denied to message");
-    }
-
-    const [image] = await db
-      .insert(messageImages)
-      .values({
-        messageId: validated.messageId,
-        cloudinaryPublicId: validated.cloudinaryPublicId,
-        secureUrl: validated.secureUrl,
-      })
-      .returning();
-
-    results.push(image);
-  }
-
-  return results;
 }
 
 /**
@@ -324,6 +272,39 @@ export async function runAssessment(input: {
     throw new Error("Access denied to conversation");
   }
 
+  // Do not reassess a message that already has an assessment. This prevents
+  // duplicate assistant replies and repeated model cost for the same message.
+  const existingAssessment = await db
+    .select({ id: assessments.id, structuredResult: assessments.structuredResult })
+    .from(assessments)
+    .where(eq(assessments.messageId, input.messageId))
+    .limit(1);
+
+  if (existingAssessment.length > 0) {
+    const existing = JSON.parse(
+      existingAssessment[0].structuredResult
+    ) as AssessmentResult;
+    const [assistantMessage] = await db
+      .select({ id: messages.id, content: messages.content })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, input.conversationId),
+          eq(messages.role, "assistant")
+        )
+      )
+      .orderBy(desc(messages.createdAt))
+      .limit(1);
+    return {
+      assessment: existing,
+      assessmentId: existingAssessment[0].id,
+      assistantMessage: {
+        id: assistantMessage?.id ?? -1,
+        content: assistantMessage?.content ?? "",
+      },
+    };
+  }
+
   // Use the stored message text as the symptom evidence, not caller input.
   const symptoms = message[0].content;
 
@@ -377,20 +358,71 @@ Approved actions: ${article.approvedActions}
     })
     .returning();
 
-  return { assessment, assessmentId: assessmentRecord.id };
+  // Build the assistant reply content server-side from the assessment.
+  // The content is derived from the model output, never from caller input,
+  // so a farmer cannot forge an assistant reply through a separate call.
+  const contentParts: string[] = [];
+  if (assessment.observedSigns.length > 0) {
+    contentParts.push("**Observed signs:**\n" + assessment.observedSigns.map((s) => `- ${s}`).join("\n"));
+  }
+  if (assessment.possibleCauses.length > 0) {
+    contentParts.push("\n**Possible causes:**\n" + assessment.possibleCauses.map((c) => `- ${c}`).join("\n"));
+  }
+  if (assessment.followUpQuestions.length > 0) {
+    contentParts.push("\n**Things to check:**\n" + assessment.followUpQuestions.map((q) => `- ${q}`).join("\n"));
+  }
+  if (assessment.immediateActions.length > 0) {
+    contentParts.push("\n**Suggested actions:**\n" + assessment.immediateActions.map((a) => `- ${a}`).join("\n"));
+  }
+  if (assessment.whenToSeekHelp) {
+    contentParts.push("\n**When to seek help:**\n" + assessment.whenToSeekHelp);
+  }
+  if (assessment.uncertainty.level !== "low") {
+    contentParts.push(`\n**Uncertainty:** ${assessment.uncertainty.level} — ${assessment.uncertainty.reason}`);
+  }
+  const assistantContent =
+    contentParts.join("\n") ||
+    "I couldn't generate an assessment. Please try again or describe your symptoms in more detail.";
+
+  // Create the assistant message server-side. The role is fixed to "assistant".
+  const [assistantMessage] = await db
+    .insert(messages)
+    .values({
+      conversationId: input.conversationId,
+      role: "assistant",
+      content: assistantContent,
+      language: input.language,
+      status: "sent",
+    })
+    .returning();
+
+  return { assessment, assessmentId: assessmentRecord.id, assistantMessage };
 }
 
 /**
- * Create an assistant message. This is server-side only: the role is fixed
- * to "assistant" and cannot be chosen by the caller, so a farmer cannot forge
- * an AI reply. Verifies conversation ownership before inserting.
+ * Delete a single message. Only the conversation owner can delete it.
+ * Used to roll back a user message when its photo upload fails so the farmer
+ * can retry the attachment without leaving a duplicate text-only message.
  */
-export async function createAssistantMessage(input: {
+export async function deleteMessage(input: {
+  messageId: number;
   conversationId: number;
-  content: string;
-  language: string;
 }) {
   const user = await getCurrentUser();
+
+  const message = await db
+    .select({ id: messages.id, conversationId: messages.conversationId })
+    .from(messages)
+    .where(eq(messages.id, input.messageId))
+    .limit(1);
+
+  if (message.length === 0) {
+    throw new Error("Message not found");
+  }
+
+  if (message[0].conversationId !== input.conversationId) {
+    throw new Error("Message does not belong to this conversation");
+  }
 
   const conversation = await db
     .select({ userId: conversations.userId })
@@ -402,17 +434,7 @@ export async function createAssistantMessage(input: {
     throw new Error("Access denied to conversation");
   }
 
-  const [message] = await db
-    .insert(messages)
-    .values({
-      conversationId: input.conversationId,
-      role: "assistant",
-      content: input.content,
-      language: input.language,
-      status: "sent",
-    })
-    .returning();
+  await db.delete(messages).where(eq(messages.id, input.messageId));
 
-  return message;
+  return { success: true };
 }
-
