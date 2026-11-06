@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { ArrowUp, Camera, Menu, Plus, Settings, Sprout, X, RefreshCw } from "lucide-react";
 import { Brand } from "@/components/app/brand";
@@ -71,7 +71,6 @@ export function ChatScreen({
   };
 }) {
   const router = useRouter();
-  const pathname = usePathname();
   const [language, setLanguage] = useState<Language>(initialLanguage ?? "English");
   const [messages, setMessages] = useState<Message[]>(initialConversation?.messages ?? []);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -83,6 +82,7 @@ export function ChatScreen({
   const [error, setError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(initialConversation ?? null);
 
   useEffect(() => {
@@ -124,6 +124,7 @@ export function ChatScreen({
     try {
       const conversation = await getConversation(id);
       if (!conversation) return;
+      setMobileDrawerOpen(false);
       setCurrentConversationId(id);
       setActiveConversation({
         id: conversation.id,
@@ -275,7 +276,7 @@ export function ChatScreen({
         uncertainty: { level: "low" | "medium" | "high"; reason: string };
       } };
 
-        // Build assistant message content from assessment fields
+      // Build assistant message content from assessment fields
         const contentParts: string[] = [];
 
         if (assessment.observedSigns.length > 0) {
@@ -385,7 +386,7 @@ export function ChatScreen({
               key={conv.id}
               onClick={() => selectConversation(conv.id)}
               className={cn(
-                "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors",
+                "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
                 currentConversationId === conv.id
                   ? "bg-sidebar-accent text-primary"
                   : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
@@ -398,7 +399,10 @@ export function ChatScreen({
                   e.stopPropagation();
                   handleDeleteConversation(conv.id);
                 }}
-                className="opacity-0 group-hover:opacity-100 ml-auto p-1 text-destructive/60 hover:text-destructive transition-opacity"
+                className={cn(
+                  "opacity-0 group-hover:opacity-100 group-focus:opacity-100 ml-auto p-1 text-destructive/60 hover:text-destructive transition-opacity",
+                  currentConversationId === conv.id ? "opacity-100" : ""
+                )}
                 aria-label="Delete conversation"
               >
                 <X className="size-4" />
@@ -446,7 +450,7 @@ export function ChatScreen({
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-16 shrink-0 items-center justify-between border-b px-4 md:px-7">
           <div className="flex items-center gap-2">
-            <Sheet open={!!pathname.includes("/chat") && typeof window !== "undefined" && window.innerWidth < 768} onOpenChange={() => {}}>
+            <Sheet open={mobileDrawerOpen} onOpenChange={setMobileDrawerOpen}>
               <SheetTrigger render={<Button variant="ghost" size="icon" className="md:hidden" aria-label="Open chat history" />}>
                 <Menu className="size-5" />
               </SheetTrigger>
