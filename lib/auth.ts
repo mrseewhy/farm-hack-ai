@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { Pool } from "pg";
+import { sendVerificationEmail } from "@/lib/email";
 
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -11,6 +12,10 @@ export const auth = betterAuth({
     enabled: true,
     window: 60,
     max: 30,
+  },
+  emailVerification: {
+    enabled: true,
+    sendVerificationEmail,
   },
   user: {
     additionalFields: {
