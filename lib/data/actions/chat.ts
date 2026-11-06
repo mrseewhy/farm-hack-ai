@@ -1,0 +1,253 @@
+"use server";
+
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { db } from "@/lib/data/dal";
+import {
+  conversations,
+  messages,
+  messageImages,
+  assessments,
+} from "@/lib/data/dal";
+import { eq, desc, and } from "drizzle-orm";
+import {
+  createConversationSchema,
+  createMessageSchema,
+  createMessageImageSchema,
+  conversationListSchema,
+  type CreateConversationInput,
+  type CreateMessageInput,
+  type CreateMessageImageInput,
+  type ConversationListInput,
+} from "@/lib/data/validation";
+
+/**
+ * Get the authenticated user from the session.
+ * Redirects to /login if no session exists.
+ */
+async function getCurrentUser() {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+  if (!session?.user) {
+    redirect("/login");
+  }
+  return session.user;
+}
+
+/**
+ * Create a new conversation for the authenticated user.
+ */
+export async function createConversation(
+  input: CreateConversationInput
+) {
+  const validated = createConversationSchema.parse(input);
+  const user = await getCurrentUser();
+
+  const [conversation] = await db
+    .insert(conversations)
+    .values({
+      userId: user.id,
+      title: validated.title,
+      crop: validated.crop,
+    })
+    .returning();
+
+  return conversation;
+}
+
+/**
+ * List the authenticated user's conversations, most recent first.
+ */
+export async function getConversations(
+  input: Partial<ConversationListInput> = {}
+) {
+  const validated = conversationListSchema.parse(input);
+  const user = await getCurrentUser();
+
+  return db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.userId, user.id))
+    .orderBy(desc(conversations.updatedAt))
+    .limit(validated.limit)
+    .offset(validated.offset);
+}
+
+/**
+ * Load a conversation by ID, including its messages and images.
+ * Only returns the conversation if it belongs to the authenticated user.
+ */
+export async function getConversation(conversationId: number) {
+  const user = await getCurrentUser();
+
+  const conversation = await db
+    .select()
+    .from(conversations)
+    .where(
+      and(eq(conversations.id, conversationId), eq(conversations.userId, user.id))
+    )
+    .limit(1);
+
+  if (conversation.length === 0) {
+    return null;
+  }
+
+  const conversationMessages = await db
+    .select()
+    .from(messages)
+    .where(eq(messages.conversationId, conversationId))
+    .orderBy(messages.createdAt);
+
+  const messagesWithImages = await Promise.all(
+    conversationMessages.map(async (message) => {
+      const images = await db
+        .select()
+        .from(messageImages)
+        .where(eq(messageImages.messageId, message.id));
+      return { ...message, images };
+    })
+  );
+
+  const assessment = await db
+    .select()
+    .from(assessments)
+    .where(eq(assessments.conversationId, conversationId))
+    .limit(1);
+
+  return {
+    ...conversation[0],
+    messages: messagesWithImages,
+    assessment: assessment[0] ?? null,
+  };
+}
+
+/**
+ * Create a new message in a conversation.
+ * Only the conversation owner can create messages.
+ */
+export async function createMessage(input: CreateMessageInput) {
+  const validated = createMessageSchema.parse(input);
+  const user = await getCurrentUser();
+
+  // Verify the conversation belongs to the user
+  const conversation = await db
+    .select({ id: conversations.id, userId: conversations.userId })
+    .from(conversations)
+    .where(eq(conversations.id, validated.conversationId))
+    .limit(1);
+
+  if (conversation.length === 0 || conversation[0].userId !== user.id) {
+    throw new Error("Conversation not found or access denied");
+  }
+
+  // Update conversation title on first message if it's still default
+  if (validated.role === "user") {
+    const existingMessages = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(eq(messages.conversationId, validated.conversationId));
+
+    if (existingMessages.length === 0) {
+      // This is the first message - use content as title (truncated)
+      const title = validated.content.length > 50
+        ? validated.content.slice(0, 50) + "..."
+        : validated.content;
+      await db
+        .update(conversations)
+        .set({ title, updatedAt: new Date() })
+        .where(eq(conversations.id, validated.conversationId));
+    }
+  }
+
+  const [message] = await db
+    .insert(messages)
+    .values({
+      conversationId: validated.conversationId,
+      role: validated.role,
+      content: validated.content,
+      language: validated.language,
+      status: validated.status,
+    })
+    .returning();
+
+  return message;
+}
+
+/**
+ * Associate Cloudinary images with a message.
+ * Only the conversation owner can add images.
+ */
+export async function createMessageImages(input: CreateMessageImageInput[]) {
+  const user = await getCurrentUser();
+  const results = [];
+
+  for (const item of input) {
+    const validated = createMessageImageSchema.parse(item);
+
+    // Verify the message belongs to the user's conversation
+    const message = await db
+      .select({
+        id: messages.id,
+        conversationId: messages.conversationId,
+      })
+      .from(messages)
+      .where(eq(messages.id, validated.messageId))
+      .limit(1);
+
+    if (message.length === 0) {
+      throw new Error(`Message ${validated.messageId} not found`);
+    }
+
+    const conversation = await db
+      .select({ userId: conversations.userId })
+      .from(conversations)
+      .where(eq(conversations.id, message[0].conversationId))
+      .limit(1);
+
+    if (conversation.length === 0 || conversation[0].userId !== user.id) {
+      throw new Error("Access denied to message");
+    }
+
+    const [image] = await db
+      .insert(messageImages)
+      .values({
+        messageId: validated.messageId,
+        cloudinaryPublicId: validated.cloudinaryPublicId,
+        secureUrl: validated.secureUrl,
+      })
+      .returning();
+
+    results.push(image);
+  }
+
+  return results;
+}
+
+/**
+ * Delete a conversation and all its messages, images, and assessments.
+ * Only the conversation owner can delete it.
+ */
+export async function deleteConversation(conversationId: number) {
+  const user = await getCurrentUser();
+
+  // Verify ownership
+  const conversation = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(
+      and(eq(conversations.id, conversationId), eq(conversations.userId, user.id))
+    )
+    .limit(1);
+
+  if (conversation.length === 0) {
+    throw new Error("Conversation not found or access denied");
+  }
+
+  await db
+    .delete(conversations)
+    .where(eq(conversations.id, conversationId));
+
+  return { success: true, conversationId };
+}
