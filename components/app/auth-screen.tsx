@@ -30,12 +30,17 @@ export function AuthScreen({ mode }: { mode: "login" | "signup" }) {
         const data = new FormData(event.currentTarget);
         const email = String(data.get("email") ?? "");
         const password = String(data.get("password") ?? "");
-        const result = signup
-          ? await authClient.signUp.email({ name: String(data.get("name") ?? ""), email, password, preferredLanguage })
-          : await authClient.signIn.email({ email, password });
-        setBusy(false);
-        if (result.error) { setNotice(result.error.message ?? "Could not access your account. Please try again."); return; }
-        router.push("/"); router.refresh();
+        try {
+          const result = signup
+            ? await authClient.signUp.email({ name: String(data.get("name") ?? ""), email, password, preferredLanguage })
+            : await authClient.signIn.email({ email, password });
+          if (result.error) { setNotice(result.error.message ?? "Could not access your account. Please try again."); return; }
+          router.push("/"); router.refresh();
+        } catch {
+          setNotice("Could not connect. Please check your connection and try again.");
+        } finally {
+          setBusy(false);
+        }
       }}>
         {signup && <div className="space-y-2"><Label htmlFor="name">Full name</Label><Input id="name" name="name" placeholder="Your name" autoComplete="name" required /></div>}
         {signup && <div className="space-y-2"><Label htmlFor="language">Preferred language</Label><select id="language" name="language" value={preferredLanguage} onChange={(event) => setPreferredLanguage(event.target.value as Language)} className="flex h-9 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">{languages.map((language) => <option key={language} value={language}>{language}</option>)}</select></div>}
