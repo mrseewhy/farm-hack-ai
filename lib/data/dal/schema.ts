@@ -122,6 +122,28 @@ export const assessmentsRelations = relations(assessments, ({ one }) => ({
 }));
 
 /**
+ * Knowledge articles table
+ * Expert-reviewed crop guidance for tomato problems.
+ * Status flow: draft → in_review → published.
+ */
+export const knowledgeArticles = pgTable("knowledge_articles", {
+  id: serial("id").primaryKey(),
+  crop: text("crop").notNull().default("tomato"),
+  problem: text("problem").notNull(), // e.g. "Early blight", "Bacterial wilt"
+  signs: text("signs").notNull(), // observable signs
+  distinguishingQuestions: text("distinguishing_questions").notNull(), // questions to ask farmer
+  approvedActions: text("approved_actions").notNull(), // safe, expert-approved actions
+  status: text("status").notNull().default("draft"), // draft | in_review | published
+  version: text("version").notNull().default("1.0"),
+  reviewer: text("reviewer"), // name of agricultural expert who reviewed
+  reviewedAt: timestamp("reviewed_at"), // when reviewed
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const knowledgeArticlesRelations = relations(knowledgeArticles, ({}) => ({}));
+
+/**
  * Table exports for queries
  */
 export const tables = {
@@ -130,4 +152,5 @@ export const tables = {
   messageImages,
   assessments,
   adminAuditEvents,
+  knowledgeArticles,
 } as const;

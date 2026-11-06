@@ -15,6 +15,13 @@
       "when": 1793965965616,
       "tag": "0001_broad_wendell_rand",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793967459822,
+      "tag": "0002_clean_thor",
+      "breakpoints": true
     }
   ]
 }

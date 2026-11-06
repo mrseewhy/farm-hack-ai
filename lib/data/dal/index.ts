@@ -5,6 +5,8 @@ export {
   messageImages,
   assessments,
   adminAuditEvents,
+  knowledgeArticles,
+  knowledgeArticlesRelations,
   conversationsRelations,
   messagesRelations,
   messageImagesRelations,

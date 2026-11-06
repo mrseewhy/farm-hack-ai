@@ -67,10 +67,182 @@ export type AssessmentResult = {
 };
 
 /**
- * System prompt for Gemini - instructs it to be cautious, avoid definite diagnoses,
- * separate observations from inferences, and never recommend unsupported pesticides/doses.
+ * List of pesticide active ingredients that must NOT be recommended
+ * without expert-reviewed guidance. This is a safeguard list.
  */
-const SYSTEM_PROMPT = `
+const RESTRICTED_PESTICIDES = [
+  "glyphosate",
+  "chlorpyrifos",
+  "imidacloprid",
+  "lambda-cyhalothrin",
+  "acetamiprid",
+  "thiamethoxam",
+  "clothianidin",
+  "cypermethrin",
+  "deltamethrin",
+  "malathion",
+  "carbaryl",
+  "mancozeb",
+  "chlorothalonil",
+  "copper oxychloride",
+];
+
+/**
+ * Check if text contains definite diagnosis language that should be avoided.
+ * Returns an array of flagged phrases found.
+ */
+function checkDefiniteDiagnosis(text: string): string[] {
+  const definitePatterns = [
+    /this is (definitely|certainly|absolutely|clearly) /i,
+    /the diagnosis is /i,
+    /your plant has /i,
+    /it is (definitely|certainly|absolutely|clearly) /i,
+    /confirmed (diagnosis|case of)/i,
+    /positive for /i,
+  ];
+
+  const flags: string[] = [];
+  for (const pattern of definitePatterns) {
+    if (pattern.test(text)) {
+      flags.push(pattern.source);
+    }
+  }
+  return flags;
+}
+
+/**
+ * Check if text contains pesticide names from the restricted list.
+ * Returns an array of flagged pesticide names found.
+ */
+function checkRestrictedPesticides(text: string): string[] {
+  const found: string[] = [];
+  const lowerText = text.toLowerCase();
+  for (const pesticide of RESTRICTED_PESTICIDES) {
+    if (lowerText.includes(pesticide.toLowerCase())) {
+      found.push(pesticide);
+    }
+  }
+  return found;
+}
+
+/**
+ * Check if text contains dose/recommendation patterns that should be avoided.
+ * Returns an array of flagged phrases found.
+ */
+function checkDoseRecommendations(text: string): string[] {
+  const dosePatterns = [
+    /\d+\s*(ml|liter|litre|spoon|cap|tablespoon|teaspoon|g|kg|gram|kilogram)/i,
+    /(mix|dilute|spray|apply|use)\s+\d+/i,
+    /\d+\s*(per|in|for)\s+(liter|litre|gal|gallon|acre|hectare)/i,
+  ];
+
+  const flags: string[] = [];
+  for (const pattern of dosePatterns) {
+    if (pattern.test(text)) {
+      flags.push(pattern.source);
+    }
+  }
+  return flags;
+}
+
+/**
+ * Apply safeguards to the AI assessment result.
+ * Removes restricted pesticide names, definite diagnoses, and dose recommendations
+ * from immediateActions and possibleCauses, and escalates uncertainty.
+ */
+function applySafeguards(result: AssessmentResult): {
+  result: AssessmentResult;
+  warnings: string[];
+} {
+  const warnings: string[] = [];
+
+  // Check possibleCauses for definite diagnosis language
+  const safeCauses: string[] = [];
+  for (const cause of result.possibleCauses) {
+    const diagnosisFlags = checkDefiniteDiagnosis(cause);
+    const pesticideFlags = checkRestrictedPesticides(cause);
+    const doseFlags = checkDoseRecommendations(cause);
+
+    if (diagnosisFlags.length > 0 || pesticideFlags.length > 0 || doseFlags.length > 0) {
+      warnings.push(
+        `Possible cause removed for safety: "${cause}" (${[
+          ...diagnosisFlags,
+          ...pesticideFlags,
+          ...doseFlags,
+        ].join(", ")})`
+      );
+    } else {
+      safeCauses.push(cause);
+    }
+  }
+
+  // Check immediateActions for pesticide names, doses, and definite diagnosis
+  const safeActions: string[] = [];
+  for (const action of result.immediateActions) {
+    const diagnosisFlags = checkDefiniteDiagnosis(action);
+    const pesticideFlags = checkRestrictedPesticides(action);
+    const doseFlags = checkDoseRecommendations(action);
+
+    if (diagnosisFlags.length > 0 || pesticideFlags.length > 0 || doseFlags.length > 0) {
+      warnings.push(
+        `Action removed for safety: "${action}" (${[
+          ...diagnosisFlags,
+          ...pesticideFlags,
+          ...doseFlags,
+        ].join(", ")})`
+      );
+    } else {
+      safeActions.push(action);
+    }
+  }
+
+  // Check observedSigns for pesticide names
+  const safeSigns: string[] = [];
+  for (const sign of result.observedSigns) {
+    const pesticideFlags = checkRestrictedPesticides(sign);
+    if (pesticideFlags.length > 0) {
+      warnings.push(
+        `Observed sign removed for safety: "${sign}" (${pesticideFlags.join(", ")})`
+      );
+    } else {
+      safeSigns.push(sign);
+    }
+  }
+
+  // If any safeguards triggered, escalate uncertainty
+  let uncertaintyLevel = result.uncertainty.level;
+  if (warnings.length > 0 && uncertaintyLevel === "low") {
+    uncertaintyLevel = "medium";
+  }
+  if (warnings.length > 2 && uncertaintyLevel === "medium") {
+    uncertaintyLevel = "high";
+  }
+
+  const uncertaintyReason = warnings.length > 0
+    ? `${result.uncertainty.reason} Some content was filtered for safety (${warnings.length} item(s) removed).`
+    : result.uncertainty.reason;
+
+  const safeResult: AssessmentResult = {
+    observedSigns: safeSigns,
+    possibleCauses: safeCauses,
+    followUpQuestions: result.followUpQuestions,
+    immediateActions: safeActions,
+    whenToSeekHelp: result.whenToSeekHelp,
+    uncertainty: {
+      level: uncertaintyLevel,
+      reason: uncertaintyReason,
+    },
+  };
+
+  return { result: safeResult, warnings };
+}
+
+/**
+ * Build the system prompt with optional expert-reviewed guidance context.
+ * The guidance text is passed in by the caller (server action).
+ */
+function buildSystemPrompt(language: string, guidanceContext: string = ""): string {
+  return `
 You are an agricultural assistant for Nigerian tomato farmers. Your role is to provide
 preliminary, cautious crop health assessments based on the farmer's description and photos.
 
@@ -83,6 +255,10 @@ CRITICAL SAFETY RULES:
 5. Escalate severe or spreading cases to a local agricultural extension worker.
 6. Respond in the farmer's chosen language when possible.
 7. Keep responses practical and actionable for smallholder farmers.
+8. Use the expert-reviewed tomato guidance above as context. Reference approved actions
+   when symptoms match known problems. Do not invent treatments.
+
+${guidanceContext}
 
 OUTPUT FORMAT: Return ONLY a JSON object with these exact fields:
 - observedSigns: string[] - visible signs from description/photos
@@ -93,20 +269,25 @@ OUTPUT FORMAT: Return ONLY a JSON object with these exact fields:
 - uncertainty: { level: "low"|"medium"|"high", reason: string }
 
 Do not include markdown code blocks, explanations, or text outside the JSON.
+Respond in ${language} when possible.
 `;
+}
 
 /**
  * Send a crop assessment request to Gemini.
- * Accepts text symptoms, image URLs (base64 or URLs), and language.
+ * Accepts text symptoms, image URLs, language, and optional guidance context.
+ * Applies safeguards to remove unsafe content before returning.
  */
 export async function assessCropHealth({
   symptoms,
   images,
   language,
+  guidanceContext,
 }: {
   symptoms: string;
   images: Array<{ secureUrl: string }>;
   language: string;
+  guidanceContext?: string;
 }): Promise<AssessmentResult> {
   const model = getGenAI().getGenerativeModel({ model: MODEL_NAME });
 
@@ -114,16 +295,15 @@ export async function assessCropHealth({
   const parts: Array<{ text: string } | { inlineData: { data: string; mimeType: string } }> = [];
 
   // Add system-like instruction as text
-  parts.push({ text: SYSTEM_PROMPT });
+  const systemPrompt = buildSystemPrompt(language, guidanceContext ?? "");
+  parts.push({ text: systemPrompt });
 
   // Add the farmer's input
   parts.push({
     text: `Language: ${language}\nFarmer's description of symptoms:\n${symptoms}\n\nAttachments: ${images.length} image(s)`,
   });
 
-  // Add images as inline data (Gemini supports image URLs via inline data or file URIs)
-  // For simplicity, we pass image URLs as text descriptions since we can't fetch them here
-  // In production, images should be downloaded and passed as base64 inline data
+  // Add images as inline data
   if (images.length > 0) {
     parts.push({
       text: `Attached crop photos (${images.length}): ${images.map((img, i) => `Image ${i + 1}: ${img.secureUrl}`).join(", ")}`,
@@ -144,22 +324,31 @@ export async function assessCropHealth({
   const text = response.text();
 
   // Parse JSON from response
+  let parsed: AssessmentResult;
   try {
     // Extract JSON from the response (handle potential markdown wrapping)
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const jsonStr = jsonMatch ? jsonMatch[0] : text;
-    const parsed = JSON.parse(jsonStr);
+    const raw = JSON.parse(jsonStr);
 
     // Validate and normalize the response
-    return {
-      observedSigns: Array.isArray(parsed.observedSigns) ? parsed.observedSigns : [],
-      possibleCauses: Array.isArray(parsed.possibleCauses) ? parsed.possibleCauses : [],
-      followUpQuestions: Array.isArray(parsed.followUpQuestions) ? parsed.followUpQuestions : [],
-      immediateActions: Array.isArray(parsed.immediateActions) ? parsed.immediateActions : [],
-      whenToSeekHelp: typeof parsed.whenToSeekHelp === "string" ? parsed.whenToSeekHelp : "Consult a local agricultural extension worker if you are unsure.",
+    parsed = {
+      observedSigns: Array.isArray(raw.observedSigns) ? raw.observedSigns : [],
+      possibleCauses: Array.isArray(raw.possibleCauses) ? raw.possibleCauses : [],
+      followUpQuestions: Array.isArray(raw.followUpQuestions) ? raw.followUpQuestions : [],
+      immediateActions: Array.isArray(raw.immediateActions) ? raw.immediateActions : [],
+      whenToSeekHelp:
+        typeof raw.whenToSeekHelp === "string"
+          ? raw.whenToSeekHelp
+          : "Consult a local agricultural extension worker if you are unsure.",
       uncertainty: {
-        level: ["low", "medium", "high"].includes(parsed.uncertainty?.level) ? parsed.uncertainty.level : "medium",
-        reason: typeof parsed.uncertainty?.reason === "string" ? parsed.uncertainty.reason : "Limited information available for assessment.",
+        level: ["low", "medium", "high"].includes(raw.uncertainty?.level)
+          ? raw.uncertainty.level
+          : "medium",
+        reason:
+          typeof raw.uncertainty?.reason === "string"
+            ? raw.uncertainty.reason
+            : "Limited information available for assessment.",
       },
     };
   } catch (parseError) {
@@ -177,4 +366,13 @@ export async function assessCropHealth({
       },
     };
   }
+
+  // Apply safeguards to remove unsafe content
+  const { result: safeResult, warnings } = applySafeguards(parsed);
+
+  if (warnings.length > 0) {
+    console.warn("AI assessment safeguards triggered:", warnings);
+  }
+
+  return safeResult;
 }

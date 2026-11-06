@@ -9,6 +9,7 @@ import {
   messages,
   messageImages,
   assessments,
+  knowledgeArticles,
 } from "@/lib/data/dal";
 import { eq, desc, and } from "drizzle-orm";
 import {
@@ -317,10 +318,36 @@ export async function runAssessment(input: {
   }
 
   // Run AI assessment
+  // Fetch expert-reviewed guidance for context
+  const guidanceArticles = await db
+    .select({
+      problem: knowledgeArticles.problem,
+      signs: knowledgeArticles.signs,
+      distinguishingQuestions: knowledgeArticles.distinguishingQuestions,
+      approvedActions: knowledgeArticles.approvedActions,
+    })
+    .from(knowledgeArticles)
+    .where(eq(knowledgeArticles.status, "published"));
+
+  let guidanceContext = "";
+  if (guidanceArticles.length > 0) {
+    guidanceContext = "\nEXPERT-REVIEWED TOMATO GUIDANCE:\n";
+    for (const article of guidanceArticles) {
+      guidanceContext += `
+Problem: ${article.problem}
+Signs: ${article.signs}
+Distinguishing questions: ${article.distinguishingQuestions}
+Approved actions: ${article.approvedActions}
+---`;
+    }
+    guidanceContext += "\nUse this guidance to inform your assessment. Reference approved actions when symptoms match known problems.";
+  }
+
   const assessment = await assessCropHealth({
     symptoms: input.symptoms,
     images: input.images,
     language: input.language,
+    guidanceContext,
   });
 
   // Save assessment to database

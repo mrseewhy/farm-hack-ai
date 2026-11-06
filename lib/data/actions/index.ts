@@ -13,4 +13,10 @@ export {
   getReviewQueue,
   logAdminAuditEvent,
   getAdminConversation,
+  getKnowledgeArticles,
+  getKnowledgeArticle,
+  createKnowledgeArticle,
+  updateKnowledgeArticle,
+  publishKnowledgeArticle,
+  getPublishedGuidance,
 } from "./admin";
