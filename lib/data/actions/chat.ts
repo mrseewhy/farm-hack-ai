@@ -22,6 +22,14 @@ import {
   type ConversationListInput,
 } from "@/lib/data/validation";
 import { assessCropHealth } from "@/lib/ai";
+import { v2 as cloudinary } from "cloudinary";
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 /**
  * Get the authenticated user from the session.
@@ -229,6 +237,7 @@ export async function createMessageImages(input: CreateMessageImageInput[]) {
 /**
  * Delete a conversation and all its messages, images, and assessments.
  * Only the conversation owner can delete it.
+ * Cloudinary media is deleted before DB records.
  */
 export async function deleteConversation(conversationId: number) {
   const user = await getCurrentUser();
@@ -246,6 +255,23 @@ export async function deleteConversation(conversationId: number) {
     throw new Error("Conversation not found or access denied");
   }
 
+  // Fetch all Cloudinary public_ids for images in this conversation
+  const images = await db
+    .select({ cloudinaryPublicId: messageImages.cloudinaryPublicId })
+    .from(messageImages)
+    .innerJoin(messages, eq(messageImages.messageId, messages.id))
+    .where(eq(messages.conversationId, conversationId));
+
+  // Delete Cloudinary media
+  for (const img of images) {
+    try {
+      await cloudinary.uploader.destroy(img.cloudinaryPublicId);
+    } catch (error) {
+      console.error(`Failed to delete Cloudinary media ${img.cloudinaryPublicId}:`, error);
+    }
+  }
+
+  // Delete DB records (cascade handles messages, images, assessments)
   await db
     .delete(conversations)
     .where(eq(conversations.id, conversationId));

@@ -4,7 +4,7 @@ import { v2 as cloudinary } from "cloudinary";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/data/dal";
-import { conversations } from "@/lib/data/dal";
+import { conversations, messageImages, messages } from "@/lib/data/dal";
 import { and, eq } from "drizzle-orm";
 
 // Configure Cloudinary
@@ -16,6 +16,7 @@ cloudinary.config({
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+const MAX_IMAGES_PER_CONVERSATION = 5;
 
 /**
  * Upload a crop photo to Cloudinary.
@@ -66,6 +67,18 @@ export async function uploadCropImage(formData: FormData) {
 
   if (conversation.length === 0) {
     return { error: "Conversation not found or access denied" };
+  }
+
+  // Validate image count per conversation
+  const existingImages = await db
+    .select({ id: messageImages.id })
+    .from(messageImages)
+    .innerJoin(messages, eq(messageImages.messageId, messages.id))
+    .where(eq(messages.conversationId, conversationId));
+  if (existingImages.length >= MAX_IMAGES_PER_CONVERSATION) {
+    return {
+      error: `Maximum ${MAX_IMAGES_PER_CONVERSATION} images per conversation reached.`,
+    };
   }
 
   // Upload to Cloudinary

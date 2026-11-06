@@ -163,6 +163,16 @@ export function ChatScreen({
       return;
     }
 
+    // Validate image count per conversation (max 5)
+    const existingImageCount = messages.reduce(
+      (count, m) => count + m.images.length,
+      0
+    );
+    if (existingImageCount >= 5) {
+      setError("Maximum 5 images per conversation reached.");
+      return;
+    }
+
     setUploadingFile(file);
     setUploadPreview(URL.createObjectURL(file));
     setError(null);
@@ -494,6 +504,14 @@ export function ChatScreen({
                 <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-muted-foreground sm:text-base">
                   Describe the signs you see or add a clear photo. We&rsquo;ll help you understand what to check next.
                 </p>
+                <div className="mt-8 max-w-sm mx-auto">
+                  <h3 className="text-sm font-semibold text-primary mb-2">Photo tips</h3>
+                  <ul className="text-sm text-muted-foreground space-y-2 list-disc pl-4">
+                    <li>Whole plant — include stems and leaves</li>
+                    <li>Affected part — close-up of the damaged area</li>
+                    <li>Good lighting — natural light, no flash</li>
+                  </ul>
+                </div>
               </div>
             ) : (
               <div className="space-y-6">
