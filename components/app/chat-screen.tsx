@@ -9,6 +9,7 @@ import { Brand } from "@/components/app/brand";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { languages, type Language, setPreferredLanguage } from "@/lib/preferences";
 import { t } from "@/lib/i18n";
@@ -17,10 +18,12 @@ import {
   getConversations,
   getConversation,
   createMessage,
+  createAssistantMessage,
   createMessageImages,
   uploadCropImage,
   deleteConversation,
   runAssessment,
+  recordFollowUp,
 } from "@/lib/data/actions";
 import { cn } from "@/lib/utils";
 
@@ -81,6 +84,13 @@ export function ChatScreen({
   const [uploadPreview, setUploadPreview] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [feedbackStage, setFeedbackStage] = useState<{
+    messageId: number;
+    helpful: string;
+  } | null>(null);
+  const [observation, setObservation] = useState("");
+  const [submittingFeedback, setSubmittingFeedback] = useState(false);
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState<number | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
@@ -265,16 +275,11 @@ export function ChatScreen({
       setUploadingFile(null);
       setUploadPreview(null);
 
-      // Run AI assessment via server action
-      const imagesForAI = imageUrl
-        ? [{ secureUrl: imageUrl }]
-        : [];
-
+      // Run AI assessment via server action. Evidence (symptoms + images) is
+      // derived server-side from the stored message and its attachments.
       const assessmentResult = await runAssessment({
         conversationId: convId,
         messageId: userMessage.id,
-        symptoms: draft.trim(),
-        images: imagesForAI,
         language,
       });
 
@@ -311,12 +316,10 @@ export function ChatScreen({
 
         const assistantContent = contentParts.join("\n") || "I couldn't generate an assessment. Please try again or describe your symptoms in more detail.";
 
-        const assistantMessage = await createMessage({
+        const assistantMessage = await createAssistantMessage({
           conversationId: convId,
-          role: "assistant",
           content: assistantContent,
           language,
-          status: "sent",
         });
 
         setMessages((prev) => [
@@ -354,6 +357,35 @@ export function ChatScreen({
       }
     } catch {
       setError("Failed to delete conversation.");
+    }
+  }
+
+  async function submitFollowUp(messageId: number, helpful: string) {
+    if (!currentConversationId) return;
+    setError(null);
+    setFeedbackStage({ messageId, helpful });
+    setObservation("");
+  }
+
+  async function finalizeFollowUp() {
+    if (!feedbackStage || !currentConversationId) return;
+    setSubmittingFeedback(true);
+    setError(null);
+    try {
+      await recordFollowUp({
+        conversationId: currentConversationId,
+        messageId: feedbackStage.messageId,
+        farmerObservation: observation.trim(),
+        outcome: feedbackStage.helpful,
+        helpful: feedbackStage.helpful,
+      });
+      setFeedbackSubmitted(feedbackStage.messageId);
+      setFeedbackStage(null);
+      setObservation("");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to submit feedback. Please try again.");
+    } finally {
+      setSubmittingFeedback(false);
     }
   }
 
@@ -600,6 +632,70 @@ export function ChatScreen({
                                 {message.assessment.uncertainty.level} — {message.assessment.uncertainty.reason}
                               </p>
                             </div>
+                          )}
+                          {feedbackStage?.messageId === message.id && (
+                            <div className="mt-3 pt-3 border-t border-border/50">
+                              <p className="text-xs font-semibold text-primary mb-2">{t("feedbackTitle", language)}</p>
+                              <p className="text-xs text-muted-foreground mb-2">
+                                {t("feedbackQuestion", language)}
+                              </p>
+                              <div className="flex gap-2 mb-3">
+                                <Button
+                                  size="sm"
+                                  onClick={() =>
+                                    submitFollowUp(message.id, "yes")
+                                  }
+                                >
+                                  {t("outcomeHelped", language)}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    submitFollowUp(message.id, "no")
+                                  }
+                                >
+                                  {t("outcomeNotHelped", language)}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    submitFollowUp(message.id, "unsure")
+                                  }
+                                >
+                                  {t("outcomeUnsure", language)}
+                                </Button>
+                              </div>
+                              {observation.trim() && (
+                                <>
+                                  <Label htmlFor="follow-up-observation">
+                                    {t("observationLabel", language)}
+                                  </Label>
+                                  <Textarea
+                                    id="follow-up-observation"
+                                    value={observation}
+                                    onChange={(e) => setObservation(e.target.value)}
+                                    className="h-24"
+                                    disabled={submittingFeedback}
+                                  />
+                                  <Button
+                                    onClick={finalizeFollowUp}
+                                    disabled={submittingFeedback}
+                                    className="mt-2 w-full"
+                                  >
+                                    {submittingFeedback
+                                      ? "Submitting…"
+                                      : t("submitFeedback", language)}
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          )}
+                          {feedbackSubmitted === message.id && (
+                            <p className="mt-2 text-xs text-muted-foreground">
+                              {t("thankYouFeedback", language)}
+                            </p>
                           )}
                         </div>
                       )}

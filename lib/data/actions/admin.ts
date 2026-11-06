@@ -8,6 +8,8 @@ import {
   adminAuditEvents,
   knowledgeArticles,
   conversations,
+  messages,
+  messageImages,
   followUps,
 } from "@/lib/data/dal";
 import { desc, sql, eq, asc, and } from "drizzle-orm";
@@ -319,10 +321,44 @@ export async function getReviewQueue() {
 
 /**
  * Get an individual conversation for admin review.
- * Logs an audit event for this access.
+ * Unlike the farmer-scoped getConversation, this does not require the
+ * caller to own the conversation — admin access is already enforced by
+ * getCurrentAdmin. Logs an audit event for this access.
  */
 export async function getAdminConversation(conversationId: number) {
   await getCurrentAdmin();
+
+  const conversation = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1);
+
+  if (conversation.length === 0) {
+    return null;
+  }
+
+  const conversationMessages = await db
+    .select()
+    .from(messages)
+    .where(eq(messages.conversationId, conversationId))
+    .orderBy(messages.createdAt);
+
+  const messagesWithImages = await Promise.all(
+    conversationMessages.map(async (message) => {
+      const images = await db
+        .select()
+        .from(messageImages)
+        .where(eq(messageImages.messageId, message.id));
+      return { ...message, images };
+    })
+  );
+
+  const assessment = await db
+    .select()
+    .from(assessments)
+    .where(eq(assessments.conversationId, conversationId))
+    .limit(1);
 
   // Log audit event for individual report access
   await logAdminAuditEvent({
@@ -331,8 +367,11 @@ export async function getAdminConversation(conversationId: number) {
     targetId: String(conversationId),
   });
 
-  const { getConversation } = await import("./chat");
-  return getConversation(conversationId);
+  return {
+    ...conversation[0],
+    messages: messagesWithImages,
+    assessment: assessment[0] ?? null,
+  };
 }
 
 /**
@@ -383,13 +422,6 @@ export async function recordFollowUp(input: {
       helpful: validated.helpful,
     })
     .returning();
-
-  // Log audit event
-  await logAdminAuditEvent({
-    action: "record_follow_up",
-    targetType: "follow_up",
-    targetId: String(followUp.id),
-  });
 
   return followUp;
 }

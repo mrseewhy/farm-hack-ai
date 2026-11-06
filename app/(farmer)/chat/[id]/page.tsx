@@ -29,6 +29,36 @@ export default async function SavedChatPage({
     redirect("/chat");
   }
 
+  // Parse the stored assessment and attach it to the assistant message so the
+  // structured observation/cause/action sections render after a reload.
+  const assessmentRecord = conversation.assessment;
+  let parsedAssessment: Message["assessment"] | null = null;
+  if (assessmentRecord) {
+    try {
+      parsedAssessment = JSON.parse(
+        assessmentRecord.structuredResult
+      ) as Message["assessment"];
+    } catch {
+      parsedAssessment = null;
+    }
+  }
+
+  const messages: Message[] = [];
+  let lastAssistantIndex = -1;
+  (conversation.messages ?? []).forEach((m) => {
+    const message = {
+      ...m,
+      role: m.role as "user" | "assistant",
+    } as Message;
+    if (message.role === "assistant") {
+      lastAssistantIndex = messages.length;
+    }
+    messages.push(message);
+  });
+  if (lastAssistantIndex !== -1 && parsedAssessment) {
+    messages[lastAssistantIndex].assessment = parsedAssessment;
+  }
+
   const initialConversation = {
     id: conversation.id,
     userId: conversation.userId,
@@ -36,11 +66,8 @@ export default async function SavedChatPage({
     crop: conversation.crop,
     createdAt: conversation.createdAt,
     updatedAt: conversation.updatedAt,
-    messages: (conversation.messages ?? []).map((m) => ({
-      ...m,
-      role: m.role as "user" | "assistant",
-    })) as Message[],
-    assessment: conversation.assessment,
+    messages,
+    assessment: null,
   };
 
   return <ChatScreen

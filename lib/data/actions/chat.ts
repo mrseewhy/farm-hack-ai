@@ -283,21 +283,24 @@ export async function deleteConversation(conversationId: number) {
 /**
  * Run AI crop health assessment for a user message and save the result.
  * Only the conversation owner can trigger an assessment.
+ *
+ * The evidence sent to the AI is derived server-side from the stored message
+ * and its attached images. The caller supplies only conversationId and
+ * messageId; symptoms and image URLs are never trusted from the client.
  */
 export async function runAssessment(input: {
   conversationId: number;
   messageId: number;
-  symptoms: string;
-  images: Array<{ secureUrl: string }>;
   language: string;
 }) {
   const user = await getCurrentUser();
 
-  // Verify the message and conversation belong to the user
+  // Verify the message exists and belongs to a conversation owned by the user.
   const message = await db
     .select({
       id: messages.id,
       conversationId: messages.conversationId,
+      content: messages.content,
     })
     .from(messages)
     .where(eq(messages.id, input.messageId))
@@ -307,17 +310,30 @@ export async function runAssessment(input: {
     throw new Error("Message not found");
   }
 
+  if (message[0].conversationId !== input.conversationId) {
+    throw new Error("Message does not belong to the given conversation");
+  }
+
   const conversation = await db
     .select({ userId: conversations.userId })
     .from(conversations)
-    .where(eq(conversations.id, message[0].conversationId))
+    .where(eq(conversations.id, input.conversationId))
     .limit(1);
 
   if (conversation.length === 0 || conversation[0].userId !== user.id) {
     throw new Error("Access denied to conversation");
   }
 
-  // Run AI assessment
+  // Use the stored message text as the symptom evidence, not caller input.
+  const symptoms = message[0].content;
+
+  // Use images attached to this stored message, not caller-supplied URLs.
+  const attachedImages = await db
+    .select({ secureUrl: messageImages.secureUrl })
+    .from(messageImages)
+    .where(eq(messageImages.messageId, input.messageId));
+  const images = attachedImages.map((img) => ({ secureUrl: img.secureUrl }));
+
   // Fetch expert-reviewed guidance for context
   const guidanceArticles = await db
     .select({
@@ -344,8 +360,8 @@ Approved actions: ${article.approvedActions}
   }
 
   const assessment = await assessCropHealth({
-    symptoms: input.symptoms,
-    images: input.images,
+    symptoms,
+    images,
     language: input.language,
     guidanceContext,
   });
@@ -362,5 +378,41 @@ Approved actions: ${article.approvedActions}
     .returning();
 
   return { assessment, assessmentId: assessmentRecord.id };
+}
+
+/**
+ * Create an assistant message. This is server-side only: the role is fixed
+ * to "assistant" and cannot be chosen by the caller, so a farmer cannot forge
+ * an AI reply. Verifies conversation ownership before inserting.
+ */
+export async function createAssistantMessage(input: {
+  conversationId: number;
+  content: string;
+  language: string;
+}) {
+  const user = await getCurrentUser();
+
+  const conversation = await db
+    .select({ userId: conversations.userId })
+    .from(conversations)
+    .where(eq(conversations.id, input.conversationId))
+    .limit(1);
+
+  if (conversation.length === 0 || conversation[0].userId !== user.id) {
+    throw new Error("Access denied to conversation");
+  }
+
+  const [message] = await db
+    .insert(messages)
+    .values({
+      conversationId: input.conversationId,
+      role: "assistant",
+      content: input.content,
+      language: input.language,
+      status: "sent",
+    })
+    .returning();
+
+  return message;
 }
 

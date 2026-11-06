@@ -3,6 +3,7 @@ export {
   getConversations,
   getConversation,
   createMessage,
+  createAssistantMessage,
   createMessageImages,
   deleteConversation,
   runAssessment,
