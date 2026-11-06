@@ -34,3 +34,24 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Better Auth database setup
+
+The app needs the `user`, `session`, `account`, and `verification` tables in the **same PostgreSQL database and schema used by the deployment**. The initial SQL migration is in `better-auth_migrations/`.
+
+Check a configured environment:
+
+```bash
+npm run db:check:auth
+```
+
+For a Vercel production deployment, pull its environment variables into an ignored local file, inspect the reported database host and schema, then apply the initial migration if the tables are absent:
+
+```bash
+npx vercel env pull .env.production.local --environment=production
+FARMHACK_ENV_FILE=.env.production.local npm run db:check:auth
+FARMHACK_ENV_FILE=.env.production.local npm run db:migrate:auth
+FARMHACK_ENV_FILE=.env.production.local npm run db:check:auth
+```
+
+Run those commands from a linked Vercel project with permission to read its production environment. Do not paste the database URL into chat or commit the environment file. The migration command creates the initial auth tables only when none exist and stops if it finds a partial schema. It is safe to rerun after the tables exist. If the check reports a different host, database, or schema from your expected target, correct the deployment's `DATABASE_URL` instead of migrating the wrong database. Also configure `BETTER_AUTH_SECRET` and set `BETTER_AUTH_URL` to the deployed app origin in Vercel, then redeploy.
