@@ -13,21 +13,23 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          id="farmhack-theme-init"
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var saved = localStorage.getItem('farmhack-theme');
+                  var dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+                  if (dark) document.documentElement.classList.add('dark');
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
       <body className="min-h-dvh font-sans antialiased">{children}</body>
-      <script
-        id="farmhack-theme-init"
-        dangerouslySetInnerHTML={{
-          __html: `
-            (function() {
-              try {
-                var saved = localStorage.getItem('farmhack-theme');
-                var dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
-                if (dark) document.documentElement.classList.add('dark');
-              } catch (e) {}
-            })();
-          `,
-        }}
-      />
     </html>
   );
 }
