@@ -17,6 +17,7 @@ export const conversations = pgTable("conversations", {
   userId: text("user_id").notNull(),
   title: text("title").notNull().default("New conversation"),
   crop: text("crop").notNull().default("tomato"),
+  language: text("language").notNull().default("English"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -144,6 +145,35 @@ export const knowledgeArticles = pgTable("knowledge_articles", {
 export const knowledgeArticlesRelations = relations(knowledgeArticles, ({}) => ({}));
 
 /**
+ * Follow-ups table
+ * Farmer feedback on whether AI advice helped, and observed outcomes.
+ */
+export const followUps = pgTable("follow_ups", {
+  id: serial("id").primaryKey(),
+  conversationId: integer("conversation_id")
+    .notNull()
+    .references(() => conversations.id, { onDelete: "cascade" }),
+  messageId: integer("message_id")
+    .notNull()
+    .references(() => messages.id, { onDelete: "cascade" }),
+  farmerObservation: text("farmer_observation").notNull(), // what the farmer observed
+  outcome: text("outcome").notNull(), // helped | not_helped | unsure
+  helpful: text("helpful").notNull().default("unsure"), // yes | no | unsure
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const followUpsRelations = relations(followUps, ({ one }) => ({
+  conversation: one(conversations, {
+    fields: [followUps.conversationId],
+    references: [conversations.id],
+  }),
+  message: one(messages, {
+    fields: [followUps.messageId],
+    references: [messages.id],
+  }),
+}));
+
+/**
  * Table exports for queries
  */
 export const tables = {
@@ -153,4 +183,5 @@ export const tables = {
   assessments,
   adminAuditEvents,
   knowledgeArticles,
+  followUps,
 } as const;

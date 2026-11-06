@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { languages, type Language, setPreferredLanguage } from "@/lib/preferences";
+import { t } from "@/lib/i18n";
 import {
   createConversation,
   getConversations,
@@ -366,7 +367,7 @@ export function ChatScreen({
           variant="ghost"
           size="icon"
           onClick={newChat}
-          aria-label="New chat"
+          aria-label={t("newChat", language)}
           disabled={sending}
         >
           <Plus className="size-5" />
@@ -379,16 +380,16 @@ export function ChatScreen({
           onClick={newChat}
           disabled={sending}
         >
-          <Plus className="size-4" /> New chat
+          <Plus className="size-4" /> {t("newChat", language)}
         </Button>
       </div>
-      <nav aria-label="Chat history" className="mt-7 flex-1 overflow-y-auto px-5 pb-5">
+      <nav aria-label={t("yourConversations", language)} className="mt-7 flex-1 overflow-y-auto px-5 pb-5">
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Your conversations
+          {t("yourConversations", language)}
         </p>
         {conversations.length === 0 ? (
           <p className="mt-5 text-sm leading-6 text-muted-foreground">
-            Your conversations will appear here.
+            {t("conversationsWillAppear", language)}
           </p>
         ) : (
           conversations.map((conv) => (
@@ -429,7 +430,7 @@ export function ChatScreen({
             sending ? "opacity-50 pointer-events-none" : ""
           )}
         >
-          <Settings className="size-4" /> Profile & settings
+          <Settings className="size-4" /> {t("profileSettings", language)}
         </Link>
         <div className="mt-1 flex items-center justify-between">
           <button
@@ -445,7 +446,7 @@ export function ChatScreen({
             )}
             disabled={sending}
           >
-            Sign out
+            {t("signOut", language)}
           </button>
           <ThemeToggle />
         </div>
@@ -465,7 +466,7 @@ export function ChatScreen({
                 <Menu className="size-5" />
               </SheetTrigger>
               <SheetContent side="left" className="w-[280px] p-0">
-                <SheetTitle className="sr-only">Chat history</SheetTitle>
+                <SheetTitle className="sr-only">{t("yourConversations", language)}</SheetTitle>
                 {sidebar}
               </SheetContent>
             </Sheet>
@@ -497,19 +498,19 @@ export function ChatScreen({
                 <div className="mx-auto mb-5 flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                   <Sprout className="size-7" />
                 </div>
-                <p className="mb-2 text-sm font-semibold text-primary">Your crop companion</p>
+                <p className="mb-2 text-sm font-semibold text-primary">{t("yourCropCompanion", language)}</p>
                 <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-                  What is happening with your crops?
+                  {t("whatIsHappening", language)}
                 </h1>
                 <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-muted-foreground sm:text-base">
-                  Describe the signs you see or add a clear photo. We&rsquo;ll help you understand what to check next.
+                  {t("describeSigns", language)}
                 </p>
                 <div className="mt-8 max-w-sm mx-auto">
-                  <h3 className="text-sm font-semibold text-primary mb-2">Photo tips</h3>
+                  <h3 className="text-sm font-semibold text-primary mb-2">{t("photoTips", language)}</h3>
                   <ul className="text-sm text-muted-foreground space-y-2 list-disc pl-4">
-                    <li>Whole plant — include stems and leaves</li>
-                    <li>Affected part — close-up of the damaged area</li>
-                    <li>Good lighting — natural light, no flash</li>
+                    <li>{t("tipWholePlant", language)}</li>
+                    <li>{t("tipAffectedPart", language)}</li>
+                    <li>{t("tipGoodLighting", language)}</li>
                   </ul>
                 </div>
               </div>
@@ -548,7 +549,7 @@ export function ChatScreen({
                         <div className="mt-3 pt-3 border-t border-border/50">
                           {message.assessment.observedSigns.length > 0 && (
                             <div className="mb-2">
-                              <p className="text-xs font-semibold text-primary mb-1">Observed signs</p>
+                              <p className="text-xs font-semibold text-primary mb-1">{t("observedSigns", language)}</p>
                               <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
                                 {message.assessment.observedSigns.map((sign) => (
                                   <li key={sign}>{sign}</li>
@@ -558,7 +559,7 @@ export function ChatScreen({
                           )}
                           {message.assessment.possibleCauses.length > 0 && (
                             <div className="mb-2">
-                              <p className="text-xs font-semibold text-primary mb-1">Possible causes</p>
+                              <p className="text-xs font-semibold text-primary mb-1">{t("possibleCauses", language)}</p>
                               <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
                                 {message.assessment.possibleCauses.map((cause) => (
                                   <li key={cause}>{cause}</li>
@@ -568,7 +569,7 @@ export function ChatScreen({
                           )}
                           {message.assessment.followUpQuestions.length > 0 && (
                             <div className="mb-2">
-                              <p className="text-xs font-semibold text-primary mb-1">Things to check</p>
+                              <p className="text-xs font-semibold text-primary mb-1">{t("thingsToCheck", language)}</p>
                               <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
                                 {message.assessment.followUpQuestions.map((q) => (
                                   <li key={q}>{q}</li>
@@ -578,7 +579,7 @@ export function ChatScreen({
                           )}
                           {message.assessment.immediateActions.length > 0 && (
                             <div className="mb-2">
-                              <p className="text-xs font-semibold text-primary mb-1">Suggested actions</p>
+                              <p className="text-xs font-semibold text-primary mb-1">{t("suggestedActions", language)}</p>
                               <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
                                 {message.assessment.immediateActions.map((a) => (
                                   <li key={a}>{a}</li>
@@ -588,17 +589,15 @@ export function ChatScreen({
                           )}
                           {message.assessment.whenToSeekHelp && (
                             <div className="mb-2">
-                              <p className="text-xs font-semibold text-primary mb-1">When to seek help</p>
+                              <p className="text-xs font-semibold text-primary mb-1">{t("whenToSeekHelp", language)}</p>
                               <p className="text-xs text-muted-foreground">{message.assessment.whenToSeekHelp}</p>
                             </div>
                           )}
                           {message.assessment.uncertainty.level !== "low" && (
                             <div className="mb-2">
-                              <p className="text-xs font-semibold text-primary mb-1">
-                                Uncertainty: {message.assessment.uncertainty.level}
-                              </p>
+                              <p className="text-xs font-semibold text-primary mb-1">{t("uncertainty", language)}</p>
                               <p className="text-xs text-muted-foreground">
-                                {message.assessment.uncertainty.reason}
+                                {message.assessment.uncertainty.level} — {message.assessment.uncertainty.reason}
                               </p>
                             </div>
                           )}
@@ -606,7 +605,7 @@ export function ChatScreen({
                       )}
                       {message.role === "assistant" && !message.assessment && (
                         <p className="mt-2 text-xs text-muted-foreground">
-                          Crop assessment · {message.language}
+                          {t("cropAssessment", language)} · {message.language}
                         </p>
                       )}
                     </div>

@@ -19,4 +19,6 @@ export {
   updateKnowledgeArticle,
   publishKnowledgeArticle,
   getPublishedGuidance,
+  recordFollowUp,
+  getFollowUps,
 } from "./admin";

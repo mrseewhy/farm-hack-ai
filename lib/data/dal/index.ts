@@ -7,6 +7,8 @@ export {
   adminAuditEvents,
   knowledgeArticles,
   knowledgeArticlesRelations,
+  followUps,
+  followUpsRelations,
   conversationsRelations,
   messagesRelations,
   messageImagesRelations,

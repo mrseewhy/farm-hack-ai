@@ -22,6 +22,13 @@
       "when": 1793967459822,
       "tag": "0002_clean_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793967815449,
+      "tag": "0003_fearless_diamondback",
+      "breakpoints": true
     }
   ]
 }

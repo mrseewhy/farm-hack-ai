@@ -7,8 +7,10 @@ import {
   assessments,
   adminAuditEvents,
   knowledgeArticles,
+  conversations,
+  followUps,
 } from "@/lib/data/dal";
-import { desc, sql, eq, asc } from "drizzle-orm";
+import { desc, sql, eq, asc, and } from "drizzle-orm";
 import { z } from "zod";
 
 /**
@@ -24,6 +26,19 @@ async function getCurrentAdmin() {
   }
   if (session.user.role !== "admin") {
     throw new Error("Admin access required");
+  }
+  return session.user;
+}
+
+/**
+ * Get the authenticated user from the session (farmer or admin).
+ */
+async function getCurrentUser() {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+  if (!session?.user) {
+    throw new Error("Not authenticated");
   }
   return session.user;
 }
@@ -318,6 +333,91 @@ export async function getAdminConversation(conversationId: number) {
 
   const { getConversation } = await import("./chat");
   return getConversation(conversationId);
+}
+
+/**
+ * Validation schema for follow-up feedback.
+ */
+const followUpSchema = z.object({
+  conversationId: z.number().int().positive(),
+  messageId: z.number().int().positive(),
+  farmerObservation: z.string().min(1).max(2000),
+  outcome: z.enum(["helped", "not_helped", "unsure"]),
+  helpful: z.enum(["yes", "no", "unsure"]),
+});
+
+/**
+ * Record a follow-up outcome from a farmer.
+ */
+export async function recordFollowUp(input: {
+  conversationId: number;
+  messageId: number;
+  farmerObservation: string;
+  outcome: string;
+  helpful: string;
+}) {
+  const user = await getCurrentUser();
+
+  const validated = followUpSchema.parse(input);
+
+  // Verify the conversation belongs to the user
+  const conversation = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(
+      and(eq(conversations.id, validated.conversationId), eq(conversations.userId, user.id))
+    )
+    .limit(1);
+
+  if (conversation.length === 0) {
+    throw new Error("Conversation not found or access denied");
+  }
+
+  const [followUp] = await db
+    .insert(followUps)
+    .values({
+      conversationId: validated.conversationId,
+      messageId: validated.messageId,
+      farmerObservation: validated.farmerObservation,
+      outcome: validated.outcome,
+      helpful: validated.helpful,
+    })
+    .returning();
+
+  // Log audit event
+  await logAdminAuditEvent({
+    action: "record_follow_up",
+    targetType: "follow_up",
+    targetId: String(followUp.id),
+  });
+
+  return followUp;
+}
+
+/**
+ * Get follow-ups for a conversation (owner only).
+ */
+export async function getFollowUps(conversationId: number) {
+  const user = await getCurrentUser();
+
+  // Verify ownership
+  const conversation = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(
+      and(eq(conversations.id, conversationId), eq(conversations.userId, user.id))
+    )
+    .limit(1);
+
+  if (conversation.length === 0) {
+    throw new Error("Conversation not found or access denied");
+  }
+
+  return db
+    .select()
+    .from(followUps)
+    .where(eq(followUps.conversationId, conversationId))
+    .orderBy(desc(followUps.createdAt));
 }
 
 /**
