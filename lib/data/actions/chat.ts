@@ -21,6 +21,7 @@ import {
   type CreateMessageImageInput,
   type ConversationListInput,
 } from "@/lib/data/validation";
+import { assessCropHealth } from "@/lib/ai";
 
 /**
  * Get the authenticated user from the session.
@@ -251,3 +252,62 @@ export async function deleteConversation(conversationId: number) {
 
   return { success: true, conversationId };
 }
+
+/**
+ * Run AI crop health assessment for a user message and save the result.
+ * Only the conversation owner can trigger an assessment.
+ */
+export async function runAssessment(input: {
+  conversationId: number;
+  messageId: number;
+  symptoms: string;
+  images: Array<{ secureUrl: string }>;
+  language: string;
+}) {
+  const user = await getCurrentUser();
+
+  // Verify the message and conversation belong to the user
+  const message = await db
+    .select({
+      id: messages.id,
+      conversationId: messages.conversationId,
+    })
+    .from(messages)
+    .where(eq(messages.id, input.messageId))
+    .limit(1);
+
+  if (message.length === 0) {
+    throw new Error("Message not found");
+  }
+
+  const conversation = await db
+    .select({ userId: conversations.userId })
+    .from(conversations)
+    .where(eq(conversations.id, message[0].conversationId))
+    .limit(1);
+
+  if (conversation.length === 0 || conversation[0].userId !== user.id) {
+    throw new Error("Access denied to conversation");
+  }
+
+  // Run AI assessment
+  const assessment = await assessCropHealth({
+    symptoms: input.symptoms,
+    images: input.images,
+    language: input.language,
+  });
+
+  // Save assessment to database
+  const [assessmentRecord] = await db
+    .insert(assessments)
+    .values({
+      conversationId: input.conversationId,
+      messageId: input.messageId,
+      structuredResult: JSON.stringify(assessment),
+      model: "gemini-1.5-flash",
+    })
+    .returning();
+
+  return { assessment, assessmentId: assessmentRecord.id };
+}
+

@@ -5,5 +5,6 @@ export {
   createMessage,
   createMessageImages,
   deleteConversation,
+  runAssessment,
 } from "./chat";
 export { uploadCropImage } from "./upload";

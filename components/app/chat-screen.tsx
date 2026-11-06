@@ -19,6 +19,7 @@ import {
   createMessageImages,
   uploadCropImage,
   deleteConversation,
+  runAssessment,
 } from "@/lib/data/actions";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +36,17 @@ export type Message = {
     cloudinaryPublicId: string;
     secureUrl: string;
   }>;
+  assessment?: {
+    observedSigns: string[];
+    possibleCauses: string[];
+    followUpQuestions: string[];
+    immediateActions: string[];
+    whenToSeekHelp: string;
+    uncertainty: {
+      level: "low" | "medium" | "high";
+      reason: string;
+    };
+  };
 };
 
 type Conversation = {
@@ -241,29 +253,74 @@ export function ChatScreen({
       setUploadingFile(null);
       setUploadPreview(null);
 
-      // TODO: Integrate Gemini AI response here when API key is configured
-      // For now, add a placeholder assistant message
-      const assistantMessage = await createMessage({
+      // Run AI assessment via server action
+      const imagesForAI = imageUrl
+        ? [{ secureUrl: imageUrl }]
+        : [];
+
+      const assessmentResult = await runAssessment({
         conversationId: convId,
-        role: "assistant",
-        content: "Analysis coming soon. Crop assessment will appear here once the AI integration is complete.",
+        messageId: userMessage.id,
+        symptoms: draft.trim(),
+        images: imagesForAI,
         language,
-        status: "sent",
       });
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: assistantMessage.id,
+      const { assessment } = assessmentResult as { assessment: {
+        observedSigns: string[];
+        possibleCauses: string[];
+        followUpQuestions: string[];
+        immediateActions: string[];
+        whenToSeekHelp: string;
+        uncertainty: { level: "low" | "medium" | "high"; reason: string };
+      } };
+
+        // Build assistant message content from assessment fields
+        const contentParts: string[] = [];
+
+        if (assessment.observedSigns.length > 0) {
+          contentParts.push("**Observed signs:**\n" + assessment.observedSigns.map((s) => `- ${s}`).join("\n"));
+        }
+        if (assessment.possibleCauses.length > 0) {
+          contentParts.push("\n**Possible causes:**\n" + assessment.possibleCauses.map((c) => `- ${c}`).join("\n"));
+        }
+        if (assessment.followUpQuestions.length > 0) {
+          contentParts.push("\n**Things to check:**\n" + assessment.followUpQuestions.map((q) => `- ${q}`).join("\n"));
+        }
+        if (assessment.immediateActions.length > 0) {
+          contentParts.push("\n**Suggested actions:**\n" + assessment.immediateActions.map((a) => `- ${a}`).join("\n"));
+        }
+        if (assessment.whenToSeekHelp) {
+          contentParts.push("\n**When to seek help:**\n" + assessment.whenToSeekHelp);
+        }
+        if (assessment.uncertainty.level !== "low") {
+          contentParts.push(`\n**Uncertainty:** ${assessment.uncertainty.level} — ${assessment.uncertainty.reason}`);
+        }
+
+        const assistantContent = contentParts.join("\n") || "I couldn't generate an assessment. Please try again or describe your symptoms in more detail.";
+
+        const assistantMessage = await createMessage({
           conversationId: convId,
           role: "assistant",
-          content: assistantMessage.content,
+          content: assistantContent,
           language,
           status: "sent",
-          createdAt: new Date(),
-          images: [],
-        },
-      ]);
+        });
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: assistantMessage.id,
+            conversationId: convId,
+            role: "assistant",
+            content: assistantContent,
+            language,
+            status: "sent",
+            createdAt: new Date(),
+            images: [],
+            assessment,
+          },
+        ]);
 
       // Refresh conversation list to update titles
       await loadConversations();
@@ -465,7 +522,67 @@ export function ChatScreen({
                         </div>
                       )}
                       {message.content}
-                      {message.role === "assistant" && (
+                      {message.role === "assistant" && message.assessment && (
+                        <div className="mt-3 pt-3 border-t border-border/50">
+                          {message.assessment.observedSigns.length > 0 && (
+                            <div className="mb-2">
+                              <p className="text-xs font-semibold text-primary mb-1">Observed signs</p>
+                              <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
+                                {message.assessment.observedSigns.map((sign) => (
+                                  <li key={sign}>{sign}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {message.assessment.possibleCauses.length > 0 && (
+                            <div className="mb-2">
+                              <p className="text-xs font-semibold text-primary mb-1">Possible causes</p>
+                              <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
+                                {message.assessment.possibleCauses.map((cause) => (
+                                  <li key={cause}>{cause}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {message.assessment.followUpQuestions.length > 0 && (
+                            <div className="mb-2">
+                              <p className="text-xs font-semibold text-primary mb-1">Things to check</p>
+                              <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
+                                {message.assessment.followUpQuestions.map((q) => (
+                                  <li key={q}>{q}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {message.assessment.immediateActions.length > 0 && (
+                            <div className="mb-2">
+                              <p className="text-xs font-semibold text-primary mb-1">Suggested actions</p>
+                              <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
+                                {message.assessment.immediateActions.map((a) => (
+                                  <li key={a}>{a}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {message.assessment.whenToSeekHelp && (
+                            <div className="mb-2">
+                              <p className="text-xs font-semibold text-primary mb-1">When to seek help</p>
+                              <p className="text-xs text-muted-foreground">{message.assessment.whenToSeekHelp}</p>
+                            </div>
+                          )}
+                          {message.assessment.uncertainty.level !== "low" && (
+                            <div className="mb-2">
+                              <p className="text-xs font-semibold text-primary mb-1">
+                                Uncertainty: {message.assessment.uncertainty.level}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {message.assessment.uncertainty.reason}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {message.role === "assistant" && !message.assessment && (
                         <p className="mt-2 text-xs text-muted-foreground">
                           Crop assessment · {message.language}
                         </p>
