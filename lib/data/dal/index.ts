@@ -4,6 +4,7 @@ export {
   messages,
   messageImages,
   assessments,
+  adminAuditEvents,
   conversationsRelations,
   messagesRelations,
   messageImagesRelations,

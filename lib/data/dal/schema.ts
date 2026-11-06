@@ -69,6 +69,21 @@ export const assessments = pgTable("assessments", {
 });
 
 /**
+ * Admin audit events table
+ * Logs admin access to individual farmer reports and other sensitive actions.
+ * adminId references the Better Auth user id (stored as text, no FK constraint
+ * to avoid conflicts with the auth schema).
+ */
+export const adminAuditEvents = pgTable("admin_audit_events", {
+  id: serial("id").primaryKey(),
+  adminId: text("admin_id").notNull(),
+  action: text("action").notNull(), // e.g. "view_report", "publish_guidance"
+  targetType: text("target_type").notNull(), // e.g. "conversation", "guidance"
+  targetId: text("target_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+/**
  * Relations for query building
  */
 export const conversationsRelations = relations(conversations, ({ many }) => ({
@@ -114,4 +129,5 @@ export const tables = {
   messages,
   messageImages,
   assessments,
+  adminAuditEvents,
 } as const;

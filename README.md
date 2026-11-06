@@ -69,6 +69,22 @@ To enable email verification when you have a permanent domain:
 
 Until then, `lib/auth.ts` has the `emailVerification` block commented out, and `lib/email.ts` contains the Resend email-sending utility ready to be wired in.
 
+## Environment variables
+
+The following environment variables must be set (never commit `.env`):
+
+| Variable | Purpose | Required |
+|----------|---------|----------|
+| `DATABASE_URL` | PostgreSQL connection string (Neon) | Yes |
+| `BETTER_AUTH_URL` | Deployed app origin (e.g. `https://farmhack.vercel.app`) | Yes |
+| `BETTER_AUTH_SECRET` | Secret for Better Auth session signing | Yes |
+| `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name for photo uploads | Yes (for photos) |
+| `CLOUDINARY_API_KEY` | Cloudinary API key | Yes (for photos) |
+| `CLOUDINARY_API_SECRET` | Cloudinary API secret | Yes (for photos) |
+| `RESEND_API_KEY` | Resend API key for email verification | No (email verification disabled) |
+| `EMAIL_FROM` | From address for emails | No (email verification disabled) |
+| `GEMINI_API_KEY` | Gemini API key for AI crop assessment | Yes (for AI features) |
+
 ## Provision an admin
 
 Only farmers can register in the app. To create an admin, register the person's account normally, verify the target database, then promote that existing account through the trusted local CLI:

@@ -8,3 +8,9 @@ export {
   runAssessment,
 } from "./chat";
 export { uploadCropImage } from "./upload";
+export {
+  getAdminOverview,
+  getReviewQueue,
+  logAdminAuditEvent,
+  getAdminConversation,
+} from "./admin";
