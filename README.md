@@ -56,6 +56,19 @@ FARMHACK_ENV_FILE=.env.production.local npm run db:check:auth
 
 Run those commands from a linked Vercel project with permission to read its production environment. Do not paste the database URL into chat or commit the environment file. The migration command creates the initial auth tables only when none exist and stops if it finds a partial schema. It is safe to rerun after the tables exist. If the check reports a different host, database, or schema from your expected target, correct the deployment's `DATABASE_URL` instead of migrating the wrong database. Also configure `BETTER_AUTH_SECRET` and set `BETTER_AUTH_URL` to the deployed app origin in Vercel, then redeploy.
 
+## Email verification (currently disabled)
+
+Email verification is temporarily disabled. New accounts can sign up and sign in immediately without verifying their email address.
+
+To enable email verification when you have a permanent domain:
+
+1. Purchase and verify a domain in [Resend](https://resend.com).
+2. Add `RESEND_API_KEY` and `EMAIL_FROM` to your `.env` (never commit this file).
+3. Uncomment the `emailVerification` block in `lib/auth.ts`.
+4. Redeploy the app.
+
+Until then, `lib/auth.ts` has the `emailVerification` block commented out, and `lib/email.ts` contains the Resend email-sending utility ready to be wired in.
+
 ## Provision an admin
 
 Only farmers can register in the app. To create an admin, register the person's account normally, verify the target database, then promote that existing account through the trusted local CLI:

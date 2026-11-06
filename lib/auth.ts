@@ -1,6 +1,5 @@
 import { betterAuth } from "better-auth";
 import { Pool } from "pg";
-import { sendVerificationEmail } from "@/lib/email";
 
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -13,10 +12,13 @@ export const auth = betterAuth({
     window: 60,
     max: 30,
   },
-  emailVerification: {
-    enabled: true,
-    sendVerificationEmail,
-  },
+  // emailVerification: {
+  //   enabled: true,
+  //   sendVerificationEmail,
+  // },
+  // Email verification is temporarily disabled pending a permanent domain name
+  // and Resend configuration. Re-enable when RESEND_API_KEY and EMAIL_FROM
+  // are configured in .env.
   user: {
     additionalFields: {
       role: {
