@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 
 const ADMIN_ROUTE_PREFIXES = ["/admin"];
-const FARMER_ROUTE_PREFIXES = ["/profile", "/chat"];
+const FARMER_ROUTE_PREFIXES = ["/chat"];
 const AUTH_ROUTES = ["/login", "/signup", "/redirect"];
 
 function isRoute(pathname: string, prefixes: string[]) {
@@ -28,7 +28,9 @@ export async function proxy(request: NextRequest) {
   // Helper: sign out (clear session cookie) and redirect to login
   const signOutAndRedirect = (to: string) => {
     const response = NextResponse.redirect(new URL(to, request.url));
+    // Better Auth prefixes the cookie with __Secure- when served over HTTPS.
     response.cookies.delete("better-auth.session_token");
+    response.cookies.delete("__Secure-better-auth.session_token");
     return response;
   };
 
@@ -62,7 +64,9 @@ export async function proxy(request: NextRequest) {
   if (isFarmerRoute) {
     if (role === "farmer") return NextResponse.next();
     if (role === "admin") {
-      return NextResponse.redirect(new URL("/chat", request.url));
+      // Admins belong in the admin workspace. Redirecting to /chat would loop,
+      // because /chat is itself a farmer route.
+      return NextResponse.redirect(new URL("/admin/dashboard", request.url));
     }
     // Unknown role → sign out + login
     return signOutAndRedirect("/login");

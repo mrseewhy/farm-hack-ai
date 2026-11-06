@@ -84,6 +84,10 @@ The following environment variables must be set (never commit `.env`):
 | `RESEND_API_KEY` | Resend API key for email verification | No (email verification disabled) |
 | `EMAIL_FROM` | From address for emails | No (email verification disabled) |
 | `GEMINI_API_KEY` | Gemini API key for AI crop assessment | Yes (for AI features) |
+| `GEMINI_MODEL` | Gemini model id used for assessments; defaults to `gemini-3.8-flash` | No |
+| `GEMINI_FALLBACK_MODELS` | Comma-separated model ids tried in order when the primary model is overloaded or out of quota; defaults to `gemini-3.6-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite` | No |
+
+Gemini's free tier allows only **20 generate-content requests per day per model**, which is not enough for a pilot. Enable billing on the Google AI project, or point `GEMINI_API_KEY` at a billed project, before launch. When a model is overloaded or its quota is exhausted, the app tries `GEMINI_FALLBACK_MODELS` in order and offers the farmer a retry action; provider details stay in the server log.
 
 ## Provision an admin
 
@@ -105,4 +109,6 @@ Farm data (conversations, messages, images, assessments, guidance) lives in Post
 
 Route handlers (`app/api/`) are **not** used for the app's data endpoints. The only route handler present is `app/api/auth/[...all]/route.ts`, which is owned by Better Auth for authentication (signup, login, logout, session). All other data operations go through server actions instead of route handlers.
 
-Validation schemas for incoming data belong in `lib/data/validation/`. These folders are currently placeholders to be filled as Phase 2 (persistence and authorization) is implemented.
+Validation schemas for incoming data belong in `lib/data/validation/`.
+
+Apply chat schema migrations with `npm run db:generate` after changing `lib/data/dal/schema.ts`, then `npm run db:migrate`. Migration SQL lives in `drizzle/`. The migration in `drizzle/0004_chat_indexes.sql` adds the indexes and the one-assessment-per-message constraint; run it against an environment after checking for existing duplicate assessments.

@@ -19,6 +19,39 @@ const ALLOWED_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
 const MAX_IMAGES_PER_CONVERSATION = 5;
 
 /**
+ * Detect common image signatures. This mirrors the allowed MIME list and does
+ * not trust the client-provided file.type.
+ */
+function looksLikeImage(buffer: Buffer): boolean {
+  if (buffer.length < 12) return false;
+
+  // JPEG: FF D8 FF
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return true;
+  }
+
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a
+  ) {
+    return true;
+  }
+
+  // WebP: "RIFF" .... "WEBP"
+  return (
+    buffer.toString("ascii", 0, 4) === "RIFF" &&
+    buffer.toString("ascii", 8, 12) === "WEBP"
+  );
+}
+
+/**
  * Upload a crop photo to Cloudinary.
  * Returns { success, publicId, secureUrl, conversationId } or { error }.
  */
@@ -29,8 +62,14 @@ export async function uploadCropImage(formData: FormData, messageId: number) {
   const conversationIdRaw = formData.get("conversationId");
   const conversationId = conversationIdRaw ? Number(conversationIdRaw) : NaN;
 
-  if (!file || !conversationId || Number.isNaN(conversationId)) {
-    return { error: "Missing file or conversation ID" };
+  if (
+    !file ||
+    !conversationId ||
+    Number.isNaN(conversationId) ||
+    !Number.isInteger(messageId) ||
+    messageId <= 0
+  ) {
+    return { error: "Missing file, conversation ID, or message ID" };
   }
 
   // Validate file type
@@ -81,22 +120,20 @@ export async function uploadCropImage(formData: FormData, messageId: number) {
     };
   }
 
-  // If a messageId is supplied, verify it belongs to this user's conversation
-  // BEFORE uploading to Cloudinary. A failed check must never leave an
-  // orphaned Cloudinary file behind. Conversation ownership was already
-  // established above, so matching the message's conversationId is sufficient.
-  if (messageId) {
-    const message = await db
-      .select({ id: messages.id, conversationId: messages.conversationId })
-      .from(messages)
-      .where(eq(messages.id, messageId))
-      .limit(1);
-    if (message.length === 0) {
-      return { error: "Message not found" };
-    }
-    if (message[0].conversationId !== conversationId) {
-      return { error: "Message does not belong to this conversation" };
-    }
+  // Verify the message belongs to this user's conversation BEFORE uploading to
+  // Cloudinary. A failed check must never leave an orphaned Cloudinary file
+  // behind. Conversation ownership was already established above, so matching
+  // the message's conversationId is sufficient.
+  const message = await db
+    .select({ id: messages.id, conversationId: messages.conversationId })
+    .from(messages)
+    .where(eq(messages.id, messageId))
+    .limit(1);
+  if (message.length === 0) {
+    return { error: "Message not found" };
+  }
+  if (message[0].conversationId !== conversationId) {
+    return { error: "Message does not belong to this conversation" };
   }
 
   // Upload to Cloudinary
@@ -104,12 +141,19 @@ export async function uploadCropImage(formData: FormData, messageId: number) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
+    // The browser-supplied MIME type is only a hint. Check the file signature
+    // so a renamed non-image cannot be uploaded to Cloudinary.
+    if (!looksLikeImage(buffer)) {
+      return { error: "File is not a valid JPEG, PNG, or WebP image." };
+    }
+
     const uploadResult = await new Promise<{ public_id: string; secure_url: string }>((resolve, reject) => {
       cloudinary.uploader
         .upload_stream(
           {
             resource_type: "image",
             folder: "farmhackai/crops",
+            allowed_formats: ["jpg", "jpeg", "png", "webp"],
             transformation: [
               { quality: "auto:good" },
               { fetch_format: "auto" },

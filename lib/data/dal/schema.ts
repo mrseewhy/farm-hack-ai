@@ -4,6 +4,8 @@ import {
   text,
   timestamp,
   integer,
+  index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -20,7 +22,10 @@ export const conversations = pgTable("conversations", {
   language: text("language").notNull().default("English"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("conversations_user_id_idx").on(table.userId),
+  index("conversations_updated_at_idx").on(table.updatedAt),
+]);
 
 /**
  * Messages table
@@ -36,7 +41,10 @@ export const messages = pgTable("messages", {
   language: text("language").notNull().default("English"),
   status: text("status").notNull().default("pending"), // "pending" | "sent" | "failed"
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("messages_conversation_id_idx").on(table.conversationId),
+  index("messages_created_at_idx").on(table.createdAt),
+]);
 
 /**
  * Message images table
@@ -50,7 +58,9 @@ export const messageImages = pgTable("message_images", {
   cloudinaryPublicId: text("cloudinary_public_id").notNull(),
   secureUrl: text("secure_url").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("message_images_message_id_idx").on(table.messageId),
+]);
 
 /**
  * Assessments table
@@ -67,7 +77,12 @@ export const assessments = pgTable("assessments", {
   structuredResult: text("structured_result").notNull(), // JSON string
   model: text("model").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("assessments_conversation_id_idx").on(table.conversationId),
+  // One assessment per message. This makes the runAssessment idempotency check
+  // atomic under concurrent submissions instead of a check-then-insert race.
+  uniqueIndex("assessments_message_id_unique").on(table.messageId),
+]);
 
 /**
  * Admin audit events table
@@ -160,7 +175,9 @@ export const followUps = pgTable("follow_ups", {
   outcome: text("outcome").notNull(), // helped | not_helped | unsure
   helpful: text("helpful").notNull().default("unsure"), // yes | no | unsure
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("follow_ups_conversation_id_idx").on(table.conversationId),
+]);
 
 export const followUpsRelations = relations(followUps, ({ one }) => ({
   conversation: one(conversations, {

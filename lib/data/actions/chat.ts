@@ -11,7 +11,7 @@ import {
   assessments,
   knowledgeArticles,
 } from "@/lib/data/dal";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, inArray, ne } from "drizzle-orm";
 import {
   createConversationSchema,
   createMessageSchema,
@@ -20,7 +20,11 @@ import {
   type CreateMessageInput,
   type ConversationListInput,
 } from "@/lib/data/validation";
-import { assessCropHealth, type AssessmentResult } from "@/lib/ai";
+import {
+  assessCropHealth,
+  MAX_HISTORY_MESSAGES,
+  type AssessmentResult,
+} from "@/lib/ai";
 import { v2 as cloudinary } from "cloudinary";
 
 // Configure Cloudinary
@@ -59,6 +63,7 @@ export async function createConversation(
       userId: user.id,
       title: validated.title,
       crop: validated.crop,
+      language: validated.language,
     })
     .returning();
 
@@ -108,15 +113,34 @@ export async function getConversation(conversationId: number) {
     .where(eq(messages.conversationId, conversationId))
     .orderBy(messages.createdAt);
 
-  const messagesWithImages = await Promise.all(
-    conversationMessages.map(async (message) => {
-      const images = await db
-        .select()
-        .from(messageImages)
-        .where(eq(messageImages.messageId, message.id));
-      return { ...message, images };
-    })
-  );
+  // One batched image query instead of one query per message (N+1).
+  const imagesByMessage = new Map<
+    number,
+    Array<typeof messageImages.$inferSelect>
+  >();
+  if (conversationMessages.length > 0) {
+    const imageRows = await db
+      .select()
+      .from(messageImages)
+      .where(
+        inArray(
+          messageImages.messageId,
+          conversationMessages.map((message) => message.id)
+        )
+      )
+      .orderBy(messageImages.createdAt);
+
+    for (const image of imageRows) {
+      const list = imagesByMessage.get(image.messageId) ?? [];
+      list.push(image);
+      imagesByMessage.set(image.messageId, list);
+    }
+  }
+
+  const messagesWithImages = conversationMessages.map((message) => ({
+    ...message,
+    images: imagesByMessage.get(message.id) ?? [],
+  }));
 
   const assessmentsList = await db
     .select()
@@ -176,7 +200,8 @@ export async function createMessage(input: CreateMessageInput) {
       role: validated.role,
       content: validated.content,
       language: validated.language,
-      status: validated.status,
+      // Status is server-owned; persisted messages are always sent.
+      status: "sent",
     })
     .returning();
 
@@ -315,6 +340,25 @@ export async function runAssessment(input: {
     .where(eq(messageImages.messageId, input.messageId));
   const images = attachedImages.map((img) => ({ secureUrl: img.secureUrl }));
 
+  // Prior turns give the model context for follow-up questions. Newest turns
+  // are kept (bounded) and restored to chronological order.
+  const priorTurns = await db
+    .select({ role: messages.role, content: messages.content })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.conversationId, input.conversationId),
+        ne(messages.id, input.messageId)
+      )
+    )
+    .orderBy(desc(messages.createdAt))
+    .limit(MAX_HISTORY_MESSAGES);
+
+  const history = priorTurns.reverse().map((turn) => ({
+    role: turn.role === "assistant" ? ("assistant" as const) : ("user" as const),
+    content: turn.content,
+  }));
+
   // Fetch expert-reviewed guidance for context
   const guidanceArticles = await db
     .select({
@@ -340,23 +384,54 @@ Approved actions: ${article.approvedActions}
     guidanceContext += "\nUse this guidance to inform your assessment. Reference approved actions when symptoms match known problems.";
   }
 
-  const assessment = await assessCropHealth({
+  const { assessment, model: assessmentModel } = await assessCropHealth({
     symptoms,
     images,
     language: input.language,
     guidanceContext,
+    history,
   });
 
-  // Save assessment to database
-  const [assessmentRecord] = await db
-    .insert(assessments)
-    .values({
-      conversationId: input.conversationId,
-      messageId: input.messageId,
-      structuredResult: JSON.stringify(assessment),
-      model: "gemini-1.5-flash",
-    })
-    .returning();
+  // Save the assessment. The unique index on assessments.message_id makes this
+  // atomic: a concurrent duplicate submission is rejected instead of creating
+  // a second assessment and a second assistant reply.
+  let assessmentId: number;
+  try {
+    const [record] = await db
+      .insert(assessments)
+      .values({
+        conversationId: input.conversationId,
+        messageId: input.messageId,
+        structuredResult: JSON.stringify(assessment),
+        // Record the model that actually produced this result, which may be a
+        // fallback when the primary model was unavailable.
+        model: assessmentModel,
+      })
+      .returning({ id: assessments.id });
+    assessmentId = record.id;
+  } catch (insertError) {
+    if ((insertError as { code?: string }).code === "23505") {
+      const [existing] = await db
+        .select({
+          id: assessments.id,
+          structuredResult: assessments.structuredResult,
+        })
+        .from(assessments)
+        .where(eq(assessments.messageId, input.messageId))
+        .limit(1);
+
+      if (existing) {
+        return {
+          assessment: JSON.parse(
+            existing.structuredResult
+          ) as AssessmentResult,
+          assessmentId: existing.id,
+          assistantMessage: { id: -1, content: "" },
+        };
+      }
+    }
+    throw insertError;
+  }
 
   // Build the assistant reply content server-side from the assessment.
   // The content is derived from the model output, never from caller input,
@@ -396,7 +471,7 @@ Approved actions: ${article.approvedActions}
     })
     .returning();
 
-  return { assessment, assessmentId: assessmentRecord.id, assistantMessage };
+  return { assessment, assessmentId, assistantMessage };
 }
 
 /**

@@ -5,6 +5,7 @@ import {
   createKnowledgeArticle,
   getKnowledgeArticles,
   publishKnowledgeArticle,
+  setKnowledgeArticleInReview,
   updateKnowledgeArticle,
   type KnowledgeArticleInput,
 } from "@/lib/data/actions/admin";
@@ -165,6 +166,20 @@ export default function GuidancePage() {
     }
   };
 
+  const handleReview = async (id: number) => {
+    setSaving(true);
+    try {
+      await setKnowledgeArticleInReview(id);
+      await reloadArticles();
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error ? err.message : "Failed to send article to review."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handlePublish = async () => {
     if (openPublish === null || !publishReviewer.trim()) return;
     setSaving(true);
@@ -280,24 +295,21 @@ export default function GuidancePage() {
                         <Edit2 className="size-4" /> Edit
                       </Button>
                     )}
-                    {article.status !== "published" && (
+                    {article.status === "draft" && (
                       <Button
                         variant="default"
                         size="sm"
-                        onClick={() => {
-                          setForm({
-                            crop: article.crop,
-                            problem: article.problem,
-                            signs: article.signs,
-                            distinguishingQuestions:
-                              article.distinguishingQuestions,
-                            approvedActions: article.approvedActions,
-                            status: article.status,
-                            version: article.version,
-                            reviewer: undefined,
-                          });
-                          setOpenPublish(article.id);
-                        }}
+                        onClick={() => handleReview(article.id)}
+                        disabled={saving}
+                      >
+                        Send to review
+                      </Button>
+                    )}
+                    {article.status === "in_review" && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => setOpenPublish(article.id)}
                         disabled={saving}
                       >
                         Publish
@@ -451,7 +463,6 @@ export default function GuidancePage() {
               >
                 <option value="draft">Draft</option>
                 <option value="in_review">In review</option>
-                <option value="published">Published</option>
               </select>
             </div>
             <div className="space-y-2">

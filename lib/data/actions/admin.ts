@@ -12,7 +12,7 @@ import {
   messageImages,
   followUps,
 } from "@/lib/data/dal";
-import { desc, sql, eq, asc, and } from "drizzle-orm";
+import { desc, sql, eq, asc, and, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 /**
@@ -97,13 +97,8 @@ export async function getKnowledgeArticles() {
     .from(knowledgeArticles)
     .orderBy(asc(knowledgeArticles.crop), asc(knowledgeArticles.problem), desc(knowledgeArticles.version));
 
-  // Log that admin accessed knowledge articles
-  await logAdminAuditEvent({
-    action: "view_knowledge_articles",
-    targetType: "knowledge_articles",
-    targetId: "all",
-  });
-
+  // Reading the article list is not sensitive enough to audit on every load;
+  // auditing every page view drowns out real access events.
   return articles;
 }
 
@@ -216,10 +211,50 @@ export async function updateKnowledgeArticle(id: number, input: KnowledgeArticle
 }
 
 /**
- * Publish a knowledge article. Requires reviewer and reviewedAt.
+ * Move a draft into review. Publishing is only allowed from this state.
+ */
+export async function setKnowledgeArticleInReview(id: number) {
+  await getCurrentAdmin();
+
+  const [existing] = await db
+    .select()
+    .from(knowledgeArticles)
+    .where(eq(knowledgeArticles.id, id))
+    .limit(1);
+
+  if (!existing) {
+    throw new Error("Knowledge article not found");
+  }
+
+  if (existing.status === "published") {
+    throw new Error("A published article cannot move back to review.");
+  }
+
+  const [article] = await db
+    .update(knowledgeArticles)
+    .set({ status: "in_review", updatedAt: new Date() })
+    .where(eq(knowledgeArticles.id, id))
+    .returning();
+
+  await logAdminAuditEvent({
+    action: "submit_guidance_for_review",
+    targetType: "knowledge_article",
+    targetId: String(article.id),
+  });
+
+  return article;
+}
+
+/**
+ * Publish a knowledge article. Requires an in-review article and a reviewer.
  */
 export async function publishKnowledgeArticle(id: number, reviewer: string) {
   await getCurrentAdmin();
+
+  const trimmedReviewer = reviewer.trim();
+  if (!trimmedReviewer) {
+    throw new Error("A reviewer name is required to publish guidance.");
+  }
 
   const [existing] = await db
     .select()
@@ -235,11 +270,17 @@ export async function publishKnowledgeArticle(id: number, reviewer: string) {
     throw new Error("Article is already published");
   }
 
+  // Enforce the documented Draft -> In review -> Published flow so guidance
+  // cannot reach the AI prompt without a review step.
+  if (existing.status !== "in_review") {
+    throw new Error("Send the article to review before publishing it.");
+  }
+
   const [article] = await db
     .update(knowledgeArticles)
     .set({
       status: "published",
-      reviewer,
+      reviewer: trimmedReviewer,
       reviewedAt: new Date(),
       updatedAt: new Date(),
     })
@@ -261,6 +302,9 @@ export async function publishKnowledgeArticle(id: number, reviewer: string) {
  * This does NOT require admin auth - used by the chat AI pipeline.
  */
 export async function getPublishedGuidance(crop: string = "tomato") {
+  // Exported as a server action, so it must not be callable anonymously.
+  await getCurrentUser();
+
   const articles = await db
     .select()
     .from(knowledgeArticles)
@@ -317,13 +361,6 @@ export async function getReviewQueue() {
       (item): item is NonNullable<typeof item> => item !== null
     );
 
-  // Log that admin accessed the review queue
-  await logAdminAuditEvent({
-    action: "view_review_queue",
-    targetType: "review_queue",
-    targetId: "all",
-  });
-
   return flagged;
 }
 
@@ -352,21 +389,42 @@ export async function getAdminConversation(conversationId: number) {
     .where(eq(messages.conversationId, conversationId))
     .orderBy(messages.createdAt);
 
-  const messagesWithImages = await Promise.all(
-    conversationMessages.map(async (message) => {
-      const images = await db
-        .select()
-        .from(messageImages)
-        .where(eq(messageImages.messageId, message.id));
-      return { ...message, images };
-    })
-  );
+  // Batched image query instead of one query per message (N+1).
+  const imagesByMessage = new Map<
+    number,
+    Array<typeof messageImages.$inferSelect>
+  >();
+  if (conversationMessages.length > 0) {
+    const imageRows = await db
+      .select()
+      .from(messageImages)
+      .where(
+        inArray(
+          messageImages.messageId,
+          conversationMessages.map((message) => message.id)
+        )
+      )
+      .orderBy(messageImages.createdAt);
 
-  const assessment = await db
+    for (const image of imageRows) {
+      const list = imagesByMessage.get(image.messageId) ?? [];
+      list.push(image);
+      imagesByMessage.set(image.messageId, list);
+    }
+  }
+
+  const messagesWithImages = conversationMessages.map((message) => ({
+    ...message,
+    images: imagesByMessage.get(message.id) ?? [],
+  }));
+
+  // Return every assessment so the review page can show the specific flagged
+  // one rather than always the first assessment in the conversation.
+  const assessmentsList = await db
     .select()
     .from(assessments)
     .where(eq(assessments.conversationId, conversationId))
-    .limit(1);
+    .orderBy(asc(assessments.createdAt));
 
   // Log audit event for individual report access
   await logAdminAuditEvent({
@@ -378,7 +436,7 @@ export async function getAdminConversation(conversationId: number) {
   return {
     ...conversation[0],
     messages: messagesWithImages,
-    assessment: assessment[0] ?? null,
+    assessments: assessmentsList,
   };
 }
 
@@ -493,9 +551,9 @@ export async function getAdminOverview() {
 
   // Count crop reports (user messages with images attached)
   const reportResult = await db.execute(sql`
-    SELECT count(DISTINCT m."conversationId") as count
+    SELECT count(DISTINCT m.conversation_id) as count
     FROM messages m
-    INNER JOIN message_images mi ON mi."messageId" = m.id
+    INNER JOIN message_images mi ON mi.message_id = m.id
     WHERE m.role = 'user'
   `);
   const cropReports = Number(reportResult.rows[0]?.count ?? 0);
@@ -504,7 +562,7 @@ export async function getAdminOverview() {
   // the review queue so the dashboard count agrees with the queue.
   const reviewResult = await db.execute(sql`
     SELECT count(*) as count FROM assessments a
-    WHERE (a."structuredResult")::jsonb -> 'uncertainty' ->> 'level' IN ('medium', 'high')
+    WHERE (a.structured_result)::jsonb -> 'uncertainty' ->> 'level' IN ('medium', 'high')
   `);
   const needsReview = Number(reviewResult.rows[0]?.count ?? 0);
 

@@ -17,6 +17,7 @@ export {
   getKnowledgeArticle,
   createKnowledgeArticle,
   updateKnowledgeArticle,
+  setKnowledgeArticleInReview,
   publishKnowledgeArticle,
   getPublishedGuidance,
   recordFollowUp,

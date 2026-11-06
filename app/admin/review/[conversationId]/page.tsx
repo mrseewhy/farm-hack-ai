@@ -37,10 +37,13 @@ type Assessment = {
 
 export default async function AdminReviewPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ conversationId: string }>;
+  searchParams: Promise<{ assessmentId?: string }>;
 }) {
   const { conversationId } = await params;
+  const { assessmentId } = await searchParams;
   const id = Number(conversationId);
 
   if (!id) {
@@ -64,7 +67,14 @@ export default async function AdminReviewPage({
     role: m.role as "user" | "assistant",
   }));
 
-  const assessmentRecord = conversation.assessment;
+  // Show the assessment the admin actually clicked in the review queue, and
+  // fall back to the most recent one for a direct link.
+  const assessmentRecords = conversation.assessments ?? [];
+  const assessmentRecord =
+    assessmentRecords.find((record) => String(record.id) === assessmentId) ??
+    assessmentRecords[assessmentRecords.length - 1] ??
+    null;
+
   let parsedAssessment: Assessment | null = null;
   if (assessmentRecord) {
     try {

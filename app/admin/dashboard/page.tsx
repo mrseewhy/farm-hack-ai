@@ -163,7 +163,9 @@ export default async function AdminDashboard() {
                         aria-hidden="true"
                       />
                       <span className="text-xs font-semibold text-destructive">
-                        High uncertainty
+                        {item.uncertainty.level === "high"
+                          ? "High uncertainty"
+                          : "Medium uncertainty"}
                       </span>
                     </div>
                     <div className="flex-1">
@@ -179,7 +181,7 @@ export default async function AdminDashboard() {
                           {new Date(item.createdAt).toLocaleDateString()}
                         </span>
                         <Link
-                          href={`/admin/review/${item.conversationId}`}
+                          href={`/admin/review/${item.conversationId}?assessmentId=${item.id}`}
                           className={cn(
                             buttonVariants({ variant: "outline", size: "sm" }),
                             "text-xs"

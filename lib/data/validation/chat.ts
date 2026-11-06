@@ -12,6 +12,7 @@ import { z } from "zod";
 export const createConversationSchema = z.object({
   title: z.string().min(1).max(200).default("New conversation"),
   crop: z.enum(["tomato"]).default("tomato"),
+  language: z.enum(["English", "Yoruba", "Hausa", "Igbo"]).default("English"),
 });
 
 export type CreateConversationInput = z.infer<typeof createConversationSchema>;
@@ -28,7 +29,7 @@ export const createMessageSchema = z.object({
   // message server-side when the photo is uploaded via uploadCropImage.
   content: z.string().max(10000).default(""),
   language: z.enum(["English", "Yoruba", "Hausa", "Igbo"]).default("English"),
-  status: z.enum(["pending", "sent", "failed"]).default("pending"),
+  // Message status is server-owned: every persisted message is "sent".
 });
 
 export type CreateMessageInput = z.infer<typeof createMessageSchema>;

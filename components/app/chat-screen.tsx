@@ -90,13 +90,22 @@ export function ChatScreen({
   const [observation, setObservation] = useState("");
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState<number | null>(null);
+  const [retryTarget, setRetryTarget] = useState<{
+    conversationId: number;
+    messageId: number;
+  } | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(initialConversation ?? null);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+    endRef.current?.scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
   }, [messages]);
 
   useEffect(() => {
@@ -208,6 +217,7 @@ export function ChatScreen({
         const newConv = await createConversation({
           title: draft.trim().slice(0, 50) || "New conversation",
           crop: "tomato",
+          language,
         });
         convId = newConv.id;
         setCurrentConversationId(convId);
@@ -229,7 +239,6 @@ export function ChatScreen({
         role: "user",
         content: draft.trim(),
         language,
-        status: "sent",
       });
 
       // Upload image if present. The upload and its binding to the message
@@ -280,11 +289,24 @@ export function ChatScreen({
       // derived server-side from the stored message and its attachments. The
       // assistant reply is also created server-side, so it cannot be forged by
       // the caller.
-      const assessmentResult = await runAssessment({
-        conversationId: convId,
-        messageId: userMessage.id,
-        language,
-      });
+      let assessmentResult: Awaited<ReturnType<typeof runAssessment>> | null =
+        null;
+      try {
+        assessmentResult = await runAssessment({
+          conversationId: convId,
+          messageId: userMessage.id,
+          language,
+        });
+        setRetryTarget(null);
+      } catch {
+        // The farmer's question is already saved. Offer a retry instead of
+        // losing the message or making them retype it. Do not surface the raw
+        // provider error to the farmer.
+        setRetryTarget({ conversationId: convId, messageId: userMessage.id });
+        setError(t("errorAssessmentFailed", language));
+        return;
+      }
+      if (!assessmentResult) return;
 
       const { assessment, assistantMessage } = assessmentResult as {
         assessment: {
@@ -323,8 +345,47 @@ export function ChatScreen({
     }
   }
 
+  async function retryAssessment() {
+    if (!retryTarget) return;
+    setSending(true);
+    setError(null);
+    try {
+      const assessmentResult = await runAssessment({
+        conversationId: retryTarget.conversationId,
+        messageId: retryTarget.messageId,
+        language,
+      });
+      const { assessment, assistantMessage } = assessmentResult as {
+        assessment: Message["assessment"];
+        assistantMessage: { id: number; content: string };
+      };
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: assistantMessage.id,
+          conversationId: retryTarget.conversationId,
+          role: "assistant",
+          content: assistantMessage.content,
+          language,
+          status: "sent",
+          createdAt: new Date(),
+          images: [],
+          assessment,
+        },
+      ]);
+      setRetryTarget(null);
+      await loadConversations();
+    } catch (err) {
+      // Provider details stay in the console; farmers get a plain message.
+      console.error("Retry assessment failed:", err);
+      setError(t("errorAssessmentFailed", language));
+    } finally {
+      setSending(false);
+    }
+  }
+
   async function handleDeleteConversation(id: number) {
-    if (!window.confirm("Delete this conversation?")) return;
+    if (!window.confirm(t("deleteConfirm", language))) return;
     try {
       await deleteConversation(id);
       await loadConversations();
@@ -336,15 +397,19 @@ export function ChatScreen({
     }
   }
 
-  async function submitFollowUp(messageId: number, helpful: string) {
-    if (!currentConversationId) return;
-    setError(null);
-    setFeedbackStage({ messageId, helpful });
+  function openFeedback(messageId: number) {
+    setFeedbackStage({ messageId, helpful: "" });
     setObservation("");
   }
 
+  function submitFollowUp(messageId: number, helpful: string) {
+    setFeedbackStage({ messageId, helpful });
+  }
+
   async function finalizeFollowUp() {
-    if (!feedbackStage || !currentConversationId) return;
+    if (!feedbackStage || !currentConversationId || !feedbackStage.helpful) {
+      return;
+    }
     setSubmittingFeedback(true);
     setError(null);
     try {
@@ -401,32 +466,37 @@ export function ChatScreen({
           </p>
         ) : (
           conversations.map((conv) => (
-            <button
+            <div
               key={conv.id}
-              onClick={() => selectConversation(conv.id)}
               className={cn(
-                "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                "group flex items-center rounded-lg transition-colors",
                 currentConversationId === conv.id
-                  ? "bg-sidebar-accent text-primary"
-                  : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+                  ? "bg-sidebar-accent"
+                  : "hover:bg-sidebar-accent"
               )}
             >
-              <Sprout className="size-4" />
-              <span className="truncate">{conv.title}</span>
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteConversation(conv.id);
-                }}
+                type="button"
+                onClick={() => selectConversation(conv.id)}
                 className={cn(
-                  "opacity-0 group-hover:opacity-100 group-focus:opacity-100 ml-auto p-1 text-destructive/60 hover:text-destructive transition-opacity",
-                  currentConversationId === conv.id ? "opacity-100" : ""
+                  "flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                  currentConversationId === conv.id
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground"
                 )}
-                aria-label="Delete conversation"
+              >
+                <Sprout className="size-4" />
+                <span className="truncate">{conv.title}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteConversation(conv.id)}
+                className="mr-1 rounded-md p-1 text-destructive/60 opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100"
+                aria-label={t("deleteConversation", language)}
               >
                 <X className="size-4" />
               </button>
-            </button>
+            </div>
           ))
         )}
       </nav>
@@ -479,9 +549,13 @@ export function ChatScreen({
               </SheetContent>
             </Sheet>
             {isNewChat ? (
-              <span className="font-medium">New conversation</span>
+              <span className="font-medium">
+                {t("newConversationTitle", language)}
+              </span>
             ) : (
-              <span className="font-medium">{activeConversation?.title || "Conversation"}</span>
+              <span className="font-medium">
+                {activeConversation?.title || t("conversationTitle", language)}
+              </span>
             )}
           </div>
           <div className="md:hidden">
@@ -523,7 +597,7 @@ export function ChatScreen({
                 </div>
               </div>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-6" aria-live="polite">
                 {messages.map((message) => (
                   <article
                     key={message.id}
@@ -552,7 +626,11 @@ export function ChatScreen({
                           ))}
                         </div>
                       )}
-                      {message.content}
+                      {/* Assistant messages with structured assessments render the
+                          cards below; the stored markdown summary would duplicate
+                          the same advice verbatim. */}
+                      {!(message.role === "assistant" && message.assessment) &&
+                        message.content}
                       {message.role === "assistant" && message.assessment && (
                         <div className="mt-3 pt-3 border-t border-border/50">
                           {message.assessment.observedSigns.length > 0 && (
@@ -609,65 +687,82 @@ export function ChatScreen({
                               </p>
                             </div>
                           )}
-                          {feedbackStage?.messageId === message.id && (
-                            <div className="mt-3 pt-3 border-t border-border/50">
-                              <p className="text-xs font-semibold text-primary mb-2">{t("feedbackTitle", language)}</p>
-                              <p className="text-xs text-muted-foreground mb-2">
-                                {t("feedbackQuestion", language)}
-                              </p>
-                              <div className="flex gap-2 mb-3">
+                          {feedbackSubmitted !== message.id &&
+                            (feedbackStage?.messageId === message.id ? (
+                              <div className="mt-3 pt-3 border-t border-border/50">
+                                <p className="text-xs font-semibold text-primary mb-2">
+                                  {t("feedbackQuestion", language)}
+                                </p>
+                                <div className="mb-3 flex flex-wrap gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant={
+                                      feedbackStage.helpful === "yes"
+                                        ? "default"
+                                        : "outline"
+                                    }
+                                    onClick={() => submitFollowUp(message.id, "yes")}
+                                  >
+                                    {t("outcomeHelped", language)}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant={
+                                      feedbackStage.helpful === "no"
+                                        ? "default"
+                                        : "outline"
+                                    }
+                                    onClick={() => submitFollowUp(message.id, "no")}
+                                  >
+                                    {t("outcomeNotHelped", language)}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant={
+                                      feedbackStage.helpful === "unsure"
+                                        ? "default"
+                                        : "outline"
+                                    }
+                                    onClick={() => submitFollowUp(message.id, "unsure")}
+                                  >
+                                    {t("outcomeUnsure", language)}
+                                  </Button>
+                                </div>
+                                <Label htmlFor={`follow-up-observation-${message.id}`}>
+                                  {t("observationLabel", language)}
+                                </Label>
+                                <Textarea
+                                  id={`follow-up-observation-${message.id}`}
+                                  value={observation}
+                                  onChange={(e) => setObservation(e.target.value)}
+                                  placeholder={t("observationPlaceholder", language)}
+                                  className="mt-2 h-24"
+                                  disabled={submittingFeedback}
+                                />
                                 <Button
-                                  size="sm"
-                                  onClick={() =>
-                                    submitFollowUp(message.id, "yes")
+                                  onClick={finalizeFollowUp}
+                                  disabled={
+                                    submittingFeedback ||
+                                    !feedbackStage.helpful ||
+                                    !observation.trim()
                                   }
+                                  className="mt-2 w-full"
                                 >
-                                  {t("outcomeHelped", language)}
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() =>
-                                    submitFollowUp(message.id, "no")
-                                  }
-                                >
-                                  {t("outcomeNotHelped", language)}
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() =>
-                                    submitFollowUp(message.id, "unsure")
-                                  }
-                                >
-                                  {t("outcomeUnsure", language)}
+                                  {submittingFeedback
+                                    ? t("submitting", language)
+                                    : t("submitFeedback", language)}
                                 </Button>
                               </div>
-                              {observation.trim() && (
-                                <>
-                                  <Label htmlFor="follow-up-observation">
-                                    {t("observationLabel", language)}
-                                  </Label>
-                                  <Textarea
-                                    id="follow-up-observation"
-                                    value={observation}
-                                    onChange={(e) => setObservation(e.target.value)}
-                                    className="h-24"
-                                    disabled={submittingFeedback}
-                                  />
-                                  <Button
-                                    onClick={finalizeFollowUp}
-                                    disabled={submittingFeedback}
-                                    className="mt-2 w-full"
-                                  >
-                                    {submittingFeedback
-                                      ? "Submitting…"
-                                      : t("submitFeedback", language)}
-                                  </Button>
-                                </>
-                              )}
-                            </div>
-                          )}
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="mt-3"
+                                onClick={() => openFeedback(message.id)}
+                              >
+                                {t("feedbackTitle", language)}
+                              </Button>
+                            ))}
                           {feedbackSubmitted === message.id && (
                             <p className="mt-2 text-xs text-muted-foreground">
                               {t("thankYouFeedback", language)}
@@ -686,7 +781,7 @@ export function ChatScreen({
                 {sending && (
                   <div className="flex justify-start">
                     <div className="max-w-[85%] rounded-2xl rounded-tl-sm bg-muted px-4 py-3 text-sm leading-6 text-muted-foreground">
-                      Analyzing your crop...
+                      {t("analyzing", language)}
                     </div>
                   </div>
                 )}
@@ -710,12 +805,27 @@ export function ChatScreen({
               </div>
             )}
             {error && (
-              <p role="alert" className="mb-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-                {error}
-              </p>
+              <div
+                role="alert"
+                className="mb-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive"
+              >
+                <p>{error}</p>
+                {retryTarget && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-2"
+                    onClick={retryAssessment}
+                    disabled={sending}
+                  >
+                    <RefreshCw className="size-3.5" />
+                    {t("retry", language)}
+                  </Button>
+                )}
+              </div>
             )}
             <Textarea
-              aria-label="Message"
+              aria-label={t("messageLabel", language)}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
@@ -724,7 +834,7 @@ export function ChatScreen({
                   sendMessage();
                 }
               }}
-              placeholder="Describe what you see on your crop&hellip;"
+              placeholder={t("placeholderMessage", language)}
               className="min-h-16 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
               disabled={sending}
             />
@@ -741,15 +851,15 @@ export function ChatScreen({
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label="Attach crop photo"
-                  title="Attach crop photo"
+                  aria-label={t("attachPhoto", language)}
+                  title={t("attachPhoto", language)}
                   onClick={() => fileRef.current?.click()}
                   disabled={sending || !!uploadingFile}
                 >
                   <Camera className="size-4" />
                 </Button>
                 <select
-                  aria-label="Conversation language"
+                  aria-label={t("conversationLanguage", language)}
                   value={language}
                   onChange={async (event) => {
                     const next = event.target.value as Language;
@@ -776,7 +886,7 @@ export function ChatScreen({
               </div>
               <Button
                 size="icon"
-                aria-label="Send message"
+                aria-label={t("sendMessage", language)}
                 disabled={(!draft.trim() && !uploadingFile) || sending}
                 onClick={sendMessage}
                 className="rounded-xl"

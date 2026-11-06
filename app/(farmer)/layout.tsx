@@ -17,7 +17,9 @@ export default async function FarmerLayout({
 
   if (session.user.role !== "farmer") {
     if (session.user.role === "admin") {
-      redirect("/chat");
+      // /chat is a farmer route, so an admin sent there would be redirected
+      // again by the proxy and loop. Send admins to their own workspace.
+      redirect("/admin/dashboard");
     }
     // Unknown role — no valid destination, send to login
     redirect("/login");
