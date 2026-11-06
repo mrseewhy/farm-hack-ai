@@ -66,3 +66,14 @@ FARMHACK_ENV_FILE=.env.production.local npm run auth:provision-admin -- admin@ex
 ```
 
 The script accepts a single email, changes only an existing farmer account, and revokes its sessions. The person signs in again to reach `/admin/dashboard`. Run it only with a database URL obtained through your trusted deployment environment; public registration never accepts the admin role.
+
+## Data layer
+
+Farm data (conversations, messages, images, assessments, guidance) lives in PostgreSQL and is accessed through Drizzle ORM. The data layer is split into two folders under `lib/data/`:
+
+- `lib/data/dal/` — Drizzle schema, queries, and database connection. Data access logic lives here.
+- `lib/data/actions/` — Server actions that call the DAL and run mutations/queries from Server and Client components.
+
+Route handlers (`app/api/`) are **not** used for the app's data endpoints. The only route handler present is `app/api/auth/[...all]/route.ts`, which is owned by Better Auth for authentication (signup, login, logout, session). All other data operations go through server actions instead of route handlers.
+
+Validation schemas for incoming data belong in `lib/data/validation/`. These folders are currently placeholders to be filled as Phase 2 (persistence and authorization) is implemented.

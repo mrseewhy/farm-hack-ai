@@ -1,0 +1,24 @@
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+
+export default async function RedirectPage() {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+
+  if (!session) {
+    redirect("/login");
+  }
+
+  if (session.user.role === "admin") {
+    redirect("/admin/dashboard");
+  }
+
+  if (session.user.role === "farmer") {
+    redirect("/chat");
+  }
+
+  // Unknown role — no valid destination, send to login
+  redirect("/login");
+}
