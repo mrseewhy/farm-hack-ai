@@ -9,6 +9,7 @@
 
 Latest machine-readable runs:
 
+- `evaluation/runs/2026-11-07T02-50-21-342Z-replay-default.json` — 38/38 (post-documentation re-run)
 - `evaluation/runs/2026-11-07T02-04-38-216Z-replay-default.json` — 38/38
 - `evaluation/runs/2026-11-07T02-04-38-802Z-replay-lite31.json` — 38/38
 
