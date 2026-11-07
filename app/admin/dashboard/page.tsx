@@ -16,6 +16,7 @@ import { AdminShell } from "@/components/app/admin-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { formatMicroUsd } from "@/lib/cost";
 import {
   getAdminOverview,
   getReviewQueue,
@@ -46,6 +47,11 @@ export default async function AdminDashboard() {
     possibleCauses: string[];
     createdAt: Date;
     model: string;
+    latestReview: {
+      decision: string;
+      notes: string;
+      createdAt: Date;
+    } | null;
   };
 
   // Use Promise.allSettled so a database outage does not silently render as
@@ -93,8 +99,20 @@ export default async function AdminDashboard() {
     error: 0,
     degradedRate: 0,
     avgLatencyMs: 0,
+    p50LatencyMs: 0,
+    p95LatencyMs: 0,
     safetyFlagTotal: 0,
     imageFailureTotal: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    estimatedCostMicroUsd: 0,
+    costPerAssessmentMicroUsd: 0,
+    quotaFailures: 0,
+    imageBytesOriginal: 0,
+    imageBytesSent: 0,
+    imageOptimized: 0,
+    queue: { queued: 0, running: 0, dead: 0 },
+    dailyTrend: [],
     recentIssues: [],
   };
   let aiTelemetryError: string | null = null;
@@ -184,19 +202,36 @@ export default async function AdminDashboard() {
               </p>
             ) : (
               <>
-                <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
                   {[
                     { label: "Assessments", value: aiTelemetry.total },
-                    { label: "Filtered", value: aiTelemetry.filtered },
-                    { label: "Fallbacks", value: aiTelemetry.fallback },
                     { label: "Errors", value: aiTelemetry.error },
-                    {
-                      label: "Avg latency",
-                      value: `${aiTelemetry.avgLatencyMs} ms`,
-                    },
                     {
                       label: "Degraded",
                       value: `${Math.round(aiTelemetry.degradedRate * 100)}%`,
+                    },
+                    {
+                      label: "p50 latency",
+                      value: `${aiTelemetry.p50LatencyMs} ms`,
+                    },
+                    {
+                      label: "p95 latency",
+                      value: `${aiTelemetry.p95LatencyMs} ms`,
+                    },
+                    {
+                      label: "Cost / assessment",
+                      value: formatMicroUsd(
+                        aiTelemetry.costPerAssessmentMicroUsd
+                      ),
+                    },
+                    {
+                      label: "Quota failures",
+                      value: aiTelemetry.quotaFailures,
+                    },
+                    {
+                      label: "Retry queue",
+                      value:
+                        aiTelemetry.queue.queued + aiTelemetry.queue.running,
                     },
                   ].map((stat) => (
                     <div
@@ -211,9 +246,28 @@ export default async function AdminDashboard() {
                   ))}
                 </div>
                 <p className="mt-3 text-xs text-muted-foreground">
-                  {aiTelemetry.safetyFlagTotal} safety flag(s) and{" "}
-                  {aiTelemetry.imageFailureTotal} failed photo(s) in this window.
+                  {aiTelemetry.safetyFlagTotal} safety flag(s),{" "}
+                  {aiTelemetry.imageFailureTotal} failed photo(s), and{" "}
+                  {aiTelemetry.estimatedCostMicroUsd > 0
+                    ? `${formatMicroUsd(aiTelemetry.estimatedCostMicroUsd)} estimated provider cost`
+                    : "no cost data yet"}{" "}
+                  in this window. Token usage:{" "}
+                  {aiTelemetry.inputTokens.toLocaleString()} input /{" "}
+                  {aiTelemetry.outputTokens.toLocaleString()} output.
+                  {aiTelemetry.queue.dead > 0 &&
+                    ` ${aiTelemetry.queue.dead} retry job(s) are dead and need attention.`}
                 </p>
+                {aiTelemetry.imageBytesOriginal > 0 && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Image optimisation sent{" "}
+                    {Math.round(aiTelemetry.imageBytesSent / 1024).toLocaleString()}{" "}
+                    KB of{" "}
+                    {Math.round(
+                      aiTelemetry.imageBytesOriginal / 1024
+                    ).toLocaleString()}{" "}
+                    KB fetched ({aiTelemetry.imageOptimized} image(s) downscaled).
+                  </p>
+                )}
                 {aiTelemetry.recentIssues.length > 0 && (
                   <div className="mt-4 space-y-2">
                     <p className="text-sm font-medium">Recent non-clean runs</p>

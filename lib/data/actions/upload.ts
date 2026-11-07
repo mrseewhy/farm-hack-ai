@@ -1,19 +1,12 @@
 "use server";
 
-import { v2 as cloudinary } from "cloudinary";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/data/dal";
 import { conversations, messageImages, messages } from "@/lib/data/dal";
 import { looksLikeImage } from "@/lib/image";
+import { deleteStoredImage, storeCropImage } from "@/lib/media";
 import { and, eq } from "drizzle-orm";
-
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
@@ -115,51 +108,30 @@ export async function uploadCropImage(formData: FormData, messageId: number) {
       return { error: "File is not a valid JPEG, PNG, or WebP image." };
     }
 
-    const uploadResult = await new Promise<{ public_id: string; secure_url: string }>((resolve, reject) => {
-      cloudinary.uploader
-        .upload_stream(
-          {
-            resource_type: "image",
-            folder: "farmhackai/crops",
-            allowed_formats: ["jpg", "jpeg", "png", "webp"],
-            transformation: [
-              { quality: "auto:good" },
-              { fetch_format: "auto" },
-              { width: 1200, height: 1200, crop: "limit" },
-            ],
-          },
-          (error, result) => {
-            if (error) reject(error);
-            else if (!result) reject(new Error("Upload returned no result"));
-            else resolve(result as { public_id: string; secure_url: string });
-          }
-        )
-        .end(buffer);
-    });
+    const uploadResult = await storeCropImage(buffer, file.type);
 
     // Bind the verified upload to the message. Ownership was already checked
-    // above, so no Cloudinary file is left behind by a failed access check.
+    // above, so no remote file is left behind by a failed access check.
     let imageId: number | null = null;
     try {
       const [image] = await db
         .insert(messageImages)
         .values({
           messageId,
-          cloudinaryPublicId: uploadResult.public_id,
-          secureUrl: uploadResult.secure_url,
+          cloudinaryPublicId: uploadResult.publicId,
+          secureUrl: uploadResult.secureUrl,
         })
         .returning();
       imageId = image.id;
     } catch (insertError) {
-      // The Cloudinary file is already uploaded; if binding it to the database
-      // fails, delete it so it cannot become an orphan.
+      // The file is already stored; if binding it to the database fails,
+      // delete it so it cannot become an orphan.
       try {
-        await cloudinary.uploader.destroy(uploadResult.public_id);
+        await deleteStoredImage(uploadResult.publicId);
       } catch {
-        // Best-effort cleanup; do not mask the original insert error.
         console.error(
-          "Failed to delete orphaned Cloudinary file",
-          uploadResult.public_id,
+          "Failed to delete orphaned uploaded image",
+          uploadResult.publicId,
           insertError
         );
       }
@@ -168,8 +140,8 @@ export async function uploadCropImage(formData: FormData, messageId: number) {
 
     return {
       success: true,
-      publicId: uploadResult.public_id,
-      secureUrl: uploadResult.secure_url,
+      publicId: uploadResult.publicId,
+      secureUrl: uploadResult.secureUrl,
       conversationId,
       imageId,
     };

@@ -387,6 +387,15 @@ export function ChatScreen({
       }
       if (!assessmentResult) return;
 
+      if (assessmentResult.queued) {
+        // The provider chain failed, but the server saved a retry job. Keep the
+        // farmer's message and offer an immediate retry as well.
+        setRetryTarget({ conversationId: convId, messageId: userMessage.id });
+        setError(t("assessmentQueued", language));
+        await loadConversations();
+        return;
+      }
+
       const { assessment, assistantMessage } = assessmentResult as {
         assessment: NonNullable<Message["assessment"]>;
         assistantMessage: { id: number; content: string };
@@ -427,6 +436,10 @@ export function ChatScreen({
         messageId: retryTarget.messageId,
         language,
       });
+      if (assessmentResult.queued) {
+        setError(t("assessmentQueued", language));
+        return;
+      }
       const { assessment, assistantMessage } = assessmentResult as {
         assessment: Message["assessment"];
         assistantMessage: { id: number; content: string };

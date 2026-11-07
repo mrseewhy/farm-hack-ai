@@ -106,6 +106,10 @@ export const adminAuditEvents = pgTable("admin_audit_events", {
   action: text("action").notNull(), // e.g. "view_report", "publish_guidance"
   targetType: text("target_type").notNull(), // e.g. "conversation", "guidance"
   targetId: text("target_id").notNull(),
+  // Optional structured context. Never store farmer text or model output here;
+  // this is for IDs, decisions, and reviewer notes that already belong to the
+  // audit record itself.
+  metadata: text("metadata"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -136,10 +140,153 @@ export const aiEvents = pgTable("ai_events", {
   imageFailed: integer("image_failed").notNull().default(0),
   validationOutcome: text("validation_outcome").notNull().default("valid"),
   outcome: text("outcome").notNull().default("ok"),
+  // Why an attempt failed, so quota spikes can be separated from timeouts,
+  // provider outages, and malformed model output. "none" for successful runs.
+  failureKind: text("failure_kind").notNull().default("none"),
+  // Provider-reported token usage. Cost is an estimate at configured rates.
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+  estimatedCostMicroUsd: integer("estimated_cost_micro_usd").notNull().default(0),
+  // Image optimization telemetry: original bytes fetched from Cloudinary,
+  // bytes actually sent to the model, and how many images were downscaled.
+  imageBytesOriginal: integer("image_bytes_original").notNull().default(0),
+  imageBytesSent: integer("image_bytes_sent").notNull().default(0),
+  imageOptimized: integer("image_optimized").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("ai_events_created_at_idx").on(table.createdAt),
   index("ai_events_outcome_idx").on(table.outcome),
+  index("ai_events_failure_kind_idx").on(table.failureKind),
+]);
+
+/**
+ * Retry-later queue for assessments whose provider chain failed.
+ *
+ * A queued job is claimed by the protected cron worker with
+ * `FOR UPDATE SKIP LOCKED`, which makes concurrent workers safe. The unique
+ * message_id index prevents duplicate active jobs for the same message.
+ */
+export const assessmentJobs = pgTable("assessment_jobs", {
+  id: serial("id").primaryKey(),
+  conversationId: integer("conversation_id")
+    .notNull()
+    .references(() => conversations.id, { onDelete: "cascade" }),
+  messageId: integer("message_id")
+    .notNull()
+    .references(() => messages.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  language: text("language").notNull().default("English"),
+  status: text("status").notNull().default("queued"), // queued | running | succeeded | dead
+  attempts: integer("attempts").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(5),
+  availableAt: timestamp("available_at").defaultNow().notNull(),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+}, (table) => [
+  uniqueIndex("assessment_jobs_message_id_unique").on(table.messageId),
+  index("assessment_jobs_status_available_idx").on(
+    table.status,
+    table.availableAt
+  ),
+]);
+
+/**
+ * Consent records. The auth user row stores the current preference, but this
+ * append-only table is the auditable record of which policy version a person
+ * accepted and when.
+ */
+export const userConsents = pgTable("user_consents", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  consentKey: text("consent_key").notNull().default("data_processing"),
+  policyVersion: text("policy_version").notNull(),
+  source: text("source").notNull().default("signup"),
+  grantedAt: timestamp("granted_at").defaultNow().notNull(),
+  revokedAt: timestamp("revoked_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("user_consents_user_id_idx").on(table.userId),
+  index("user_consents_key_idx").on(table.consentKey),
+]);
+
+/**
+ * Human safety review of an AI assessment. This is the human-in-the-loop
+ * counterpart to the deterministic safety filter: medium/high uncertainty
+ * assessments can be marked reviewed, followed up, or unsafe.
+ */
+export const safetyReviews = pgTable("safety_reviews", {
+  id: serial("id").primaryKey(),
+  assessmentId: integer("assessment_id")
+    .notNull()
+    .references(() => assessments.id, { onDelete: "cascade" }),
+  adminId: text("admin_id").notNull(),
+  decision: text("decision").notNull(), // approved | needs_follow_up | unsafe
+  notes: text("notes").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("safety_reviews_assessment_id_idx").on(table.assessmentId),
+  index("safety_reviews_created_at_idx").on(table.createdAt),
+]);
+
+/**
+ * Server error tracking captured by Next's `onRequestError` instrumentation.
+ * Stores a bounded message and a stack hash, never a full stack or request
+ * body, so it can support alerting without becoming a second copy of user data.
+ */
+export const errorEvents = pgTable("error_events", {
+  id: serial("id").primaryKey(),
+  source: text("source").notNull().default("server"),
+  route: text("route").notNull().default("unknown"),
+  method: text("method").notNull().default("unknown"),
+  routePath: text("route_path"),
+  errorName: text("error_name"),
+  message: text("message").notNull(),
+  digest: text("digest"),
+  stackHash: text("stack_hash"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("error_events_created_at_idx").on(table.createdAt),
+]);
+
+/**
+ * Operational alerts emitted by the protected health-check cron. Rows are kept
+ * even when webhook delivery fails so the dashboard can show alert history.
+ */
+export const operationalAlerts = pgTable("operational_alerts", {
+  id: serial("id").primaryKey(),
+  alertKey: text("alert_key").notNull(),
+  severity: text("severity").notNull(), // warning | critical
+  metric: text("metric").notNull(),
+  value: text("value").notNull(),
+  threshold: text("threshold").notNull(),
+  windowMinutes: integer("window_minutes").notNull().default(60),
+  delivered: boolean("delivered").notNull().default(false),
+  deliveryError: text("delivery_error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("operational_alerts_key_created_idx").on(
+    table.alertKey,
+    table.createdAt
+  ),
+]);
+
+/**
+ * Audit trail for scheduled retention runs. Records aggregate counts only.
+ */
+export const retentionRuns = pgTable("retention_runs", {
+  id: serial("id").primaryKey(),
+  status: text("status").notNull().default("running"), // running | succeeded | failed
+  conversationsDeleted: integer("conversations_deleted").notNull().default(0),
+  imagesDeleted: integer("images_deleted").notNull().default(0),
+  telemetryDeleted: integer("telemetry_deleted").notNull().default(0),
+  errorsDeleted: integer("errors_deleted").notNull().default(0),
+  finishedAt: timestamp("finished_at"),
+  error: text("error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("retention_runs_created_at_idx").on(table.createdAt),
 ]);
 
 /**
@@ -259,6 +406,12 @@ export const tables = {
   assessments,
   adminAuditEvents,
   aiEvents,
+  assessmentJobs,
+  userConsents,
+  safetyReviews,
+  errorEvents,
+  operationalAlerts,
+  retentionRuns,
   knowledgeArticles,
   followUps,
 } as const;

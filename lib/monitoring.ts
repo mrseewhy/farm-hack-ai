@@ -30,6 +30,19 @@ export type AiValidationOutcome = "valid" | "recovered" | "invalid";
  */
 export type AiEventOutcome = "ok" | "filtered" | "fallback" | "error";
 
+/**
+ * Coarse failure classification used for quota and latency alerting. Provider
+ * error strings are kept in server logs; only this bounded category is stored.
+ */
+export type AiFailureKind =
+  | "none"
+  | "quota"
+  | "timeout"
+  | "provider"
+  | "safety"
+  | "invalid"
+  | "unknown";
+
 export type AiEvent = {
   eventType: string;
   promptVersion: string;
@@ -43,6 +56,14 @@ export type AiEvent = {
   imageFailed: number;
   validationOutcome: AiValidationOutcome;
   outcome: AiEventOutcome;
+  failureKind: AiFailureKind;
+  inputTokens: number;
+  outputTokens: number;
+  /** Estimated cost at configured rates, stored as integer micro-USD. */
+  estimatedCostMicroUsd: number;
+  imageBytesOriginal: number;
+  imageBytesSent: number;
+  imageOptimized: number;
   occurredAt: string;
 };
 
@@ -59,6 +80,9 @@ const MAX_LATENCY_MS = 600_000; // 10 minutes: anything longer is an outlier, no
 const MAX_FLAGS = 10_000;
 const MAX_IMAGES = 50;
 const MAX_ATTEMPTS = 50;
+const MAX_TOKENS = 10_000_000;
+const MAX_COST_MICRO_USD = 100_000_000; // $100 per event: a bug, not a real call
+const MAX_IMAGE_BYTES_TOTAL = 1_000_000_000; // 1GB across one request
 
 const VALIDATION_OUTCOMES: AiValidationOutcome[] = [
   "valid",
@@ -66,6 +90,48 @@ const VALIDATION_OUTCOMES: AiValidationOutcome[] = [
   "invalid",
 ];
 const OUTCOMES: AiEventOutcome[] = ["ok", "filtered", "fallback", "error"];
+const FAILURE_KINDS: AiFailureKind[] = [
+  "none",
+  "quota",
+  "timeout",
+  "provider",
+  "safety",
+  "invalid",
+  "unknown",
+];
+
+/**
+ * Classify a provider failure from its message. Deliberately coarse: the full
+ * provider error stays in server logs, while the database keeps enough signal
+ * to distinguish quota exhaustion from timeouts and outages.
+ */
+export function classifyProviderFailure(message: string): AiFailureKind {
+  const value = message.toLowerCase();
+  if (
+    /quota|rate.?limit|429|resource_exhausted|billing|exceeded.*(limit|quota)/.test(
+      value
+    )
+  ) {
+    return "quota";
+  }
+  if (/timed out|timeout|deadline exceeded|etimedout/.test(value)) {
+    return "timeout";
+  }
+  if (/safety|blocked|responsible ai|content filter|prohibited/.test(value)) {
+    return "safety";
+  }
+  if (
+    /503|502|500|overloaded|high demand|unavailable|internal server|network|fetch failed/.test(
+      value
+    )
+  ) {
+    return "provider";
+  }
+  if (/invalid|parse|schema|malformed|empty response/.test(value)) {
+    return "invalid";
+  }
+  return "unknown";
+}
 
 function clampInt(
   value: unknown,
@@ -134,6 +200,10 @@ export function buildAiEvent(input: AiEventInput = {}): AiEvent {
     ? (input.outcome as AiEventOutcome)
     : "ok";
 
+  const failureKind = FAILURE_KINDS.includes(input.failureKind as AiFailureKind)
+    ? (input.failureKind as AiFailureKind)
+    : "none";
+
   return {
     eventType: cleanLabel(input.eventType, "assessment"),
     promptVersion: cleanLabel(input.promptVersion, PROMPT_VERSION),
@@ -147,6 +217,35 @@ export function buildAiEvent(input: AiEventInput = {}): AiEvent {
     imageFailed,
     validationOutcome,
     outcome,
+    // Only failure outcomes can carry a failure classification. A successful
+    // caller that accidentally passes one must not create a false alert.
+    failureKind: outcome === "error" ? failureKind : "none",
+    inputTokens: clampInt(input.inputTokens, 0, MAX_TOKENS, 0),
+    outputTokens: clampInt(input.outputTokens, 0, MAX_TOKENS, 0),
+    estimatedCostMicroUsd: clampInt(
+      input.estimatedCostMicroUsd,
+      0,
+      MAX_COST_MICRO_USD,
+      0
+    ),
+    imageBytesOriginal: clampInt(
+      input.imageBytesOriginal,
+      0,
+      MAX_IMAGE_BYTES_TOTAL,
+      0
+    ),
+    imageBytesSent: clampInt(
+      input.imageBytesSent,
+      0,
+      MAX_IMAGE_BYTES_TOTAL,
+      0
+    ),
+    imageOptimized: clampInt(
+      input.imageOptimized,
+      0,
+      MAX_IMAGES,
+      0
+    ),
     occurredAt: normalizeTimestamp(input.occurredAt),
   };
 }

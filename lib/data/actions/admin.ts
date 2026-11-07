@@ -7,11 +7,13 @@ import {
   assessments,
   adminAuditEvents,
   aiEvents,
+  assessmentJobs,
   knowledgeArticles,
   conversations,
   messages,
   messageImages,
   followUps,
+  safetyReviews,
 } from "@/lib/data/dal";
 import {
   desc,
@@ -72,6 +74,7 @@ export async function logAdminAuditEvent(input: {
   action: string;
   targetType: string;
   targetId: string;
+  metadata?: Record<string, unknown>;
 }) {
   const admin = await getCurrentAdmin();
 
@@ -82,6 +85,7 @@ export async function logAdminAuditEvent(input: {
       action: input.action,
       targetType: input.targetType,
       targetId: input.targetId,
+      metadata: input.metadata ? JSON.stringify(input.metadata) : null,
     })
     .returning();
 
@@ -456,6 +460,11 @@ export async function getReviewQueue() {
           possibleCauses: parsed.possibleCauses ?? [],
           createdAt: row.createdAt,
           model: row.model,
+          latestReview: null as {
+            decision: string;
+            notes: string;
+            createdAt: Date;
+          } | null,
         };
       } catch {
         return null;
@@ -465,7 +474,107 @@ export async function getReviewQueue() {
       (item): item is NonNullable<typeof item> => item !== null
     );
 
+  // Attach the most recent human review to each flagged assessment so the
+  // dashboard can distinguish unreviewed cases from closed ones.
+  if (flagged.length > 0) {
+    const reviews = await db
+      .select({
+        assessmentId: safetyReviews.assessmentId,
+        decision: safetyReviews.decision,
+        notes: safetyReviews.notes,
+        createdAt: safetyReviews.createdAt,
+      })
+      .from(safetyReviews)
+      .where(
+        inArray(
+          safetyReviews.assessmentId,
+          flagged.map((item) => item.id)
+        )
+      )
+      .orderBy(desc(safetyReviews.createdAt));
+
+    const latestByAssessment = new Map<
+      number,
+      { decision: string; notes: string; createdAt: Date }
+    >();
+    for (const review of reviews) {
+      if (!latestByAssessment.has(review.assessmentId)) {
+        latestByAssessment.set(review.assessmentId, {
+          decision: review.decision,
+          notes: review.notes,
+          createdAt: review.createdAt,
+        });
+      }
+    }
+    for (const item of flagged) {
+      item.latestReview = latestByAssessment.get(item.id) ?? null;
+    }
+  }
+
   return flagged;
+}
+
+const safetyReviewSchema = z.object({
+  assessmentId: z.number().int().positive(),
+  decision: z.enum(["approved", "needs_follow_up", "unsafe"]),
+  notes: z.string().trim().min(3).max(2000),
+});
+
+/** Record a human safety review for one AI assessment. */
+export async function recordSafetyReview(input: {
+  assessmentId: number;
+  decision: string;
+  notes: string;
+}) {
+  const admin = await getCurrentAdmin();
+  const validated = parseInput(
+    safetyReviewSchema,
+    input,
+    "Could not save the safety review. Check the decision and notes."
+  );
+
+  const [assessment] = await db
+    .select({ id: assessments.id })
+    .from(assessments)
+    .where(eq(assessments.id, validated.assessmentId))
+    .limit(1);
+
+  if (!assessment) {
+    throw new Error("Assessment not found");
+  }
+
+  const [review] = await db
+    .insert(safetyReviews)
+    .values({
+      assessmentId: validated.assessmentId,
+      adminId: admin.id,
+      decision: validated.decision,
+      notes: validated.notes,
+    })
+    .returning();
+
+  await logAdminAuditEvent({
+    action: "record_safety_review",
+    targetType: "assessment",
+    targetId: String(validated.assessmentId),
+    metadata: {
+      decision: validated.decision,
+      reviewId: review.id,
+    },
+  });
+
+  return review;
+}
+
+/** List human safety reviews for one assessment, newest first. */
+export async function getSafetyReviews(assessmentId: number) {
+  await getCurrentAdmin();
+
+  return db
+    .select()
+    .from(safetyReviews)
+    .where(eq(safetyReviews.assessmentId, assessmentId))
+    .orderBy(desc(safetyReviews.createdAt));
 }
 
 /**
@@ -729,17 +838,46 @@ export type AiTelemetrySummary = {
   /** Share of attempts that needed the safe fallback or failed outright. */
   degradedRate: number;
   avgLatencyMs: number;
+  p50LatencyMs: number;
+  p95LatencyMs: number;
   safetyFlagTotal: number;
   imageFailureTotal: number;
+  inputTokens: number;
+  outputTokens: number;
+  /** Estimated at configured rates, stored as integer micro-USD. */
+  estimatedCostMicroUsd: number;
+  costPerAssessmentMicroUsd: number;
+  quotaFailures: number;
+  imageBytesOriginal: number;
+  imageBytesSent: number;
+  imageOptimized: number;
+  queue: {
+    queued: number;
+    running: number;
+    dead: number;
+  };
+  dailyTrend: Array<{
+    day: string;
+    total: number;
+    errors: number;
+    quotaFailures: number;
+    avgLatencyMs: number;
+    p95LatencyMs: number;
+    estimatedCostMicroUsd: number;
+  }>;
   recentIssues: Array<{
     id: number;
     outcome: string;
+    failureKind: string;
     modelRequested: string;
     modelUsed: string | null;
     latencyMs: number;
     safetyFlagCount: number;
     imageFailed: number;
     validationOutcome: string;
+    inputTokens: number;
+    outputTokens: number;
+    estimatedCostMicroUsd: number;
     createdAt: Date;
   }>;
 };
@@ -768,8 +906,23 @@ export async function getAiTelemetrySummary(
       count(*) FILTER (WHERE outcome = 'fallback')::int AS fallback,
       count(*) FILTER (WHERE outcome = 'error')::int AS error,
       coalesce(avg(latency_ms), 0)::int AS avg_latency_ms,
+      coalesce(
+        percentile_cont(0.5) WITHIN GROUP (ORDER BY latency_ms),
+        0
+      )::int AS p50_latency_ms,
+      coalesce(
+        percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms),
+        0
+      )::int AS p95_latency_ms,
       coalesce(sum(safety_flag_count), 0)::int AS safety_flag_total,
-      coalesce(sum(image_failed), 0)::int AS image_failure_total
+      coalesce(sum(image_failed), 0)::int AS image_failure_total,
+      coalesce(sum(input_tokens), 0)::bigint AS input_tokens,
+      coalesce(sum(output_tokens), 0)::bigint AS output_tokens,
+      coalesce(sum(estimated_cost_micro_usd), 0)::bigint AS estimated_cost_micro_usd,
+      count(*) FILTER (WHERE failure_kind = 'quota')::int AS quota_failures,
+      coalesce(sum(image_bytes_original), 0)::bigint AS image_bytes_original,
+      coalesce(sum(image_bytes_sent), 0)::bigint AS image_bytes_sent,
+      coalesce(sum(image_optimized), 0)::int AS image_optimized
     FROM ai_events
     WHERE created_at >= now() - make_interval(hours => ${safeWindow})
   `);
@@ -779,17 +932,73 @@ export async function getAiTelemetrySummary(
   const total = num(row.total);
   const fallback = num(row.fallback);
   const error = num(row.error);
+  const estimatedCostMicroUsd = num(row.estimated_cost_micro_usd);
+
+  const trendResult = await db.execute(sql`
+    WITH days AS (
+      SELECT generate_series(
+        current_date - make_interval(days => 13),
+        current_date,
+        interval '1 day'
+      )::date AS day
+    )
+    SELECT
+      to_char(days.day, 'YYYY-MM-DD') AS day,
+      count(events.id)::int AS total,
+      count(events.id) FILTER (WHERE events.outcome = 'error')::int AS errors,
+      count(events.id) FILTER (
+        WHERE events.failure_kind = 'quota'
+      )::int AS quota_failures,
+      coalesce(avg(events.latency_ms), 0)::int AS avg_latency_ms,
+      coalesce(
+        percentile_cont(0.95) WITHIN GROUP (ORDER BY events.latency_ms),
+        0
+      )::int AS p95_latency_ms,
+      coalesce(sum(events.estimated_cost_micro_usd), 0)::bigint AS estimated_cost_micro_usd
+    FROM days
+    LEFT JOIN ai_events events
+      ON events.created_at >= days.day
+      AND events.created_at < days.day + interval '1 day'
+    GROUP BY days.day
+    ORDER BY days.day
+  `);
+
+  const dailyTrend = trendResult.rows.map((trend) => {
+    const trendRow = trend as Record<string, unknown>;
+    return {
+      day: String(trendRow.day),
+      total: num(trendRow.total),
+      errors: num(trendRow.errors),
+      quotaFailures: num(trendRow.quota_failures),
+      avgLatencyMs: num(trendRow.avg_latency_ms),
+      p95LatencyMs: num(trendRow.p95_latency_ms),
+      estimatedCostMicroUsd: num(trendRow.estimated_cost_micro_usd),
+    };
+  });
+
+  const queueResult = await db.execute(sql`
+    SELECT
+      count(*) FILTER (WHERE status = 'queued')::int AS queued,
+      count(*) FILTER (WHERE status = 'running')::int AS running,
+      count(*) FILTER (WHERE status = 'dead')::int AS dead
+    FROM assessment_jobs
+  `);
+  const queueRow = (queueResult.rows[0] ?? {}) as Record<string, unknown>;
 
   const recentIssues = await db
     .select({
       id: aiEvents.id,
       outcome: aiEvents.outcome,
+      failureKind: aiEvents.failureKind,
       modelRequested: aiEvents.modelRequested,
       modelUsed: aiEvents.modelUsed,
       latencyMs: aiEvents.latencyMs,
       safetyFlagCount: aiEvents.safetyFlagCount,
       imageFailed: aiEvents.imageFailed,
       validationOutcome: aiEvents.validationOutcome,
+      inputTokens: aiEvents.inputTokens,
+      outputTokens: aiEvents.outputTokens,
+      estimatedCostMicroUsd: aiEvents.estimatedCostMicroUsd,
       createdAt: aiEvents.createdAt,
     })
     .from(aiEvents)
@@ -806,8 +1015,25 @@ export async function getAiTelemetrySummary(
     error,
     degradedRate: total > 0 ? (fallback + error) / total : 0,
     avgLatencyMs: num(row.avg_latency_ms),
+    p50LatencyMs: num(row.p50_latency_ms),
+    p95LatencyMs: num(row.p95_latency_ms),
     safetyFlagTotal: num(row.safety_flag_total),
     imageFailureTotal: num(row.image_failure_total),
+    inputTokens: num(row.input_tokens),
+    outputTokens: num(row.output_tokens),
+    estimatedCostMicroUsd,
+    costPerAssessmentMicroUsd:
+      total > 0 ? Math.round(estimatedCostMicroUsd / total) : 0,
+    quotaFailures: num(row.quota_failures),
+    imageBytesOriginal: num(row.image_bytes_original),
+    imageBytesSent: num(row.image_bytes_sent),
+    imageOptimized: num(row.image_optimized),
+    queue: {
+      queued: num(queueRow.queued),
+      running: num(queueRow.running),
+      dead: num(queueRow.dead),
+    },
+    dailyTrend,
     recentIssues,
   };
 }

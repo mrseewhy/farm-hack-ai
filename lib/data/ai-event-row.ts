@@ -25,6 +25,13 @@ export type AiEventRow = {
   imageFailed: number;
   validationOutcome: string;
   outcome: string;
+  failureKind: string;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCostMicroUsd: number;
+  imageBytesOriginal: number;
+  imageBytesSent: number;
+  imageOptimized: number;
   createdAt: Date;
 };
 
@@ -46,6 +53,13 @@ export function aiEventToRow(
     imageFailed: event.imageFailed,
     validationOutcome: event.validationOutcome,
     outcome: event.outcome,
+    failureKind: event.failureKind,
+    inputTokens: event.inputTokens,
+    outputTokens: event.outputTokens,
+    estimatedCostMicroUsd: event.estimatedCostMicroUsd,
+    imageBytesOriginal: event.imageBytesOriginal,
+    imageBytesSent: event.imageBytesSent,
+    imageOptimized: event.imageOptimized,
     createdAt: new Date(event.occurredAt),
   };
 }

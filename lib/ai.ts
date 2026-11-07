@@ -1,4 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import {
   assessmentResultSchema,
   type AssessmentResult,
@@ -19,8 +21,12 @@ import {
 import {
   PROMPT_VERSION,
   type AiEventOutcome,
+  type AiFailureKind,
   type AiValidationOutcome,
 } from "@/lib/monitoring";
+import { estimateCostMicroUsd } from "@/lib/cost";
+import { optimizeImageForModel } from "@/lib/image-optimize";
+import { e2eAssessmentText, isE2eMode } from "@/lib/e2e";
 
 // Re-export the contract so server actions keep importing it from "@/lib/ai".
 export type { AssessmentResult } from "@/lib/data/validation/assessment";
@@ -242,31 +248,52 @@ async function withRetry<T>(run: () => Promise<T>): Promise<T> {
     : new Error("AI assessment request failed");
 }
 
+type PreparedImage = {
+  part: ContentPart;
+  originalBytes: number;
+  sentBytes: number;
+  optimized: boolean;
+};
+
 /**
- * Fetch an image from its URL and return it as Gemini inline data.
- * Throws if the image cannot be retrieved.
+ * Fetch an image from its URL, normalise it, and return Gemini inline data.
+ *
+ * The model receives a downscaled JPEG, not the original phone-camera asset.
+ * The E2E branch reads the local test upload; it is unreachable in production.
  */
-async function imageToInlineData(secureUrl: string): Promise<ContentPart> {
+async function imageToInlineData(secureUrl: string): Promise<PreparedImage> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), IMAGE_FETCH_TIMEOUT_MS);
   try {
-    const response = await fetch(secureUrl, { signal: controller.signal });
-    if (!response.ok) {
-      throw new Error(`Failed to fetch image: ${response.status}`);
+    let buffer: Buffer;
+
+    if (isE2eMode() && secureUrl.startsWith("/")) {
+      const localPath = path.join(
+        process.cwd(),
+        "public",
+        secureUrl.replace(/^\/+/, "")
+      );
+      buffer = await readFile(localPath);
+    } else {
+      const response = await fetch(secureUrl, { signal: controller.signal });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.status}`);
+      }
+
+      // Reject non-image responses early. An error page or JSON payload can
+      // otherwise be silently forwarded to the model as if it were a photo.
+      if (!isImageContentType(response.headers.get("content-type"))) {
+        throw new Error("Fetched resource is not an image");
+      }
+
+      const contentLength = response.headers.get("content-length");
+      if (contentLength && Number(contentLength) > MAX_IMAGE_BYTES) {
+        throw new Error("Image too large for analysis");
+      }
+
+      buffer = Buffer.from(await response.arrayBuffer());
     }
 
-    // Reject non-image responses early. An error page or JSON payload can
-    // otherwise be silently forwarded to the model as if it were a photo.
-    if (!isImageContentType(response.headers.get("content-type"))) {
-      throw new Error("Fetched resource is not an image");
-    }
-
-    const contentLength = response.headers.get("content-length");
-    if (contentLength && Number(contentLength) > MAX_IMAGE_BYTES) {
-      throw new Error("Image too large for analysis");
-    }
-
-    const buffer = await response.arrayBuffer();
     if (buffer.byteLength > MAX_IMAGE_BYTES) {
       throw new Error("Image too large for analysis");
     }
@@ -275,14 +302,23 @@ async function imageToInlineData(secureUrl: string): Promise<ContentPart> {
     }
 
     const bytes = new Uint8Array(buffer);
-    // Trust the bytes, not the header: send the sniffed MIME type.
+    // Trust the bytes, not the header: validate the actual file signature.
     const sniffed = sniffImageMimeType(bytes);
     if (!sniffed) {
       throw new Error("Fetched file is not a valid JPEG, PNG, or WebP image");
     }
 
-    const base64 = Buffer.from(buffer).toString("base64");
-    return { inlineData: { data: base64, mimeType: sniffed } };
+    // Downscale and strip metadata before sending bytes to the model.
+    const optimizedImage = await optimizeImageForModel(buffer);
+    const base64 = optimizedImage.buffer.toString("base64");
+    return {
+      part: {
+        inlineData: { data: base64, mimeType: optimizedImage.mimeType },
+      },
+      originalBytes: optimizedImage.originalBytes,
+      sentBytes: optimizedImage.optimizedBytes,
+      optimized: optimizedImage.optimized,
+    };
   } finally {
     clearTimeout(timeoutId);
   }
@@ -373,6 +409,13 @@ export type AssessmentTelemetry = {
   imageFailed: number;
   validationOutcome: AiValidationOutcome;
   outcome: AiEventOutcome;
+  failureKind: AiFailureKind;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCostMicroUsd: number;
+  imageBytesOriginal: number;
+  imageBytesSent: number;
+  imageOptimized: number;
 };
 
 /**
@@ -384,6 +427,9 @@ export type AssessmentRawResponse = {
   model: string;
   /** How many candidate models were attempted before this one answered. */
   fallbackAttempts?: number;
+  /** Provider-reported token usage, when available. */
+  inputTokens?: number;
+  outputTokens?: number;
 };
 
 export type RawAssessmentResponder = (
@@ -410,6 +456,17 @@ export async function generateRawAssessment(
   const hasImages = contents.some((turn) =>
     turn.parts.some((part) => "inlineData" in part)
   );
+
+  // Local Playwright mode only; production builds cannot reach this branch.
+  if (isE2eMode()) {
+    return {
+      text: e2eAssessmentText(hasImages),
+      model: "e2e-test-model",
+      fallbackAttempts: 1,
+      inputTokens: 120,
+      outputTokens: 180,
+    };
+  }
   const perAttemptTimeoutMs = hasImages
     ? IMAGE_GENERATE_TIMEOUT_MS
     : GENERATE_TIMEOUT_MS;
@@ -450,7 +507,14 @@ export async function generateRawAssessment(
         )
       );
 
-      return { text: result.response.text(), model: candidate, fallbackAttempts: attempts };
+      const usage = result.response.usageMetadata;
+      return {
+        text: result.response.text(),
+        model: candidate,
+        fallbackAttempts: attempts,
+        inputTokens: usage?.promptTokenCount ?? 0,
+        outputTokens: usage?.candidatesTokenCount ?? 0,
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       failures.push(`${candidate}: ${message}`);
@@ -485,9 +549,16 @@ function finalizeAssessment(
     imageIssues?: { total: number; failed: number };
     fallbackAttempts?: number;
     latencyMs?: number;
+    inputTokens?: number;
+    outputTokens?: number;
+    imageBytesOriginal?: number;
+    imageBytesSent?: number;
+    imageOptimized?: number;
   }
 ): { assessment: AssessmentResult; model: string; telemetry: AssessmentTelemetry } {
   const { language, evidence, imageIssues } = options;
+  const inputTokens = options.inputTokens ?? 0;
+  const outputTokens = options.outputTokens ?? 0;
 
   const cleaned = text
     .trim()
@@ -534,6 +605,13 @@ function finalizeAssessment(
         imageFailed: imageIssues?.failed ?? 0,
         validationOutcome,
         outcome: "fallback",
+        failureKind: "none",
+        inputTokens,
+        outputTokens,
+        estimatedCostMicroUsd: estimateCostMicroUsd(inputTokens, outputTokens),
+        imageBytesOriginal: options.imageBytesOriginal ?? 0,
+        imageBytesSent: options.imageBytesSent ?? 0,
+        imageOptimized: options.imageOptimized ?? 0,
       },
     };
   }
@@ -582,6 +660,13 @@ function finalizeAssessment(
       imageFailed: imageIssues?.failed ?? 0,
       validationOutcome,
       outcome,
+      failureKind: "none",
+      inputTokens,
+      outputTokens,
+      estimatedCostMicroUsd: estimateCostMicroUsd(inputTokens, outputTokens),
+      imageBytesOriginal: options.imageBytesOriginal ?? 0,
+      imageBytesSent: options.imageBytesSent ?? 0,
+      imageOptimized: options.imageOptimized ?? 0,
     },
   };
 }
@@ -641,9 +726,16 @@ export async function assessCropHealth({
   // Track failures so the farmer can be told explicitly when a photo was not
   // examined instead of receiving an assessment that silently ignored it.
   let failedImages = 0;
+  let originalImageBytes = 0;
+  let sentImageBytes = 0;
+  let optimizedImages = 0;
   for (const [index, img] of images.entries()) {
     try {
-      parts.push(await imageToInlineData(img.secureUrl));
+      const prepared = await imageToInlineData(img.secureUrl);
+      parts.push(prepared.part);
+      originalImageBytes += prepared.originalBytes;
+      sentImageBytes += prepared.sentBytes;
+      if (prepared.optimized) optimizedImages += 1;
     } catch (error) {
       failedImages += 1;
       console.error(
@@ -680,6 +772,11 @@ export async function assessCropHealth({
       // End-to-end latency, including image fetch: this is what the farmer
       // actually waits for, so it is the number worth monitoring.
       latencyMs: Date.now() - startedAt,
+      inputTokens: raw.inputTokens,
+      outputTokens: raw.outputTokens,
+      imageBytesOriginal: originalImageBytes,
+      imageBytesSent: sentImageBytes,
+      imageOptimized: optimizedImages,
     }
   );
 

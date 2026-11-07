@@ -71,6 +71,8 @@ const translations: Record<Language, Record<string, string>> = {
     deleteConfirm: "Delete this conversation?",
     retry: "Retry analysis",
     errorAssessmentFailed: "Could not analyze the crop. Please try again.",
+    assessmentQueued:
+      "The crop service is busy. Your message is saved and will be retried automatically; you can also retry now.",
     errorInvalidImage: "Invalid image type. Use JPEG, PNG, or WebP.",
     errorImageTooLarge: "Image too large. Maximum 10MB.",
     errorMaxImages: "Maximum 5 images per conversation reached.",
@@ -218,6 +220,8 @@ const translations: Record<Language, Record<string, string>> = {
     retry: "Gbìyànjú àyẹ̀wò lẹ́ẹ̀kan sí i",
     errorAssessmentFailed:
       "A kò lè ṣàyẹ̀wò ohun ọ̀gbà náà. Jọ̀wọ́ gbìyànjú lẹ́ẹ̀kan sí i.",
+    assessmentQueued:
+      "Iṣẹ́ àyẹ̀wò díbọ́. A ti fi ìfiránṣẹ́ rẹ pamọ́, a ó sì gbìyànjú lẹ́ẹ̀kan sí i; o lè gbìyànjú báyìí pẹ̀lú.",
     errorInvalidImage: "Irú fọ́tò kò tọ́. Lo JPEG, PNG, tàbí WebP.",
     errorImageTooLarge: "Fọ́tò náà tóbi jù. Ìwọ̀n 10MB.",
     errorMaxImages: "Fọ́tò márùn-ún ni ó pọ̀ jù fún ìjíròrò kan.",
@@ -366,6 +370,8 @@ const translations: Record<Language, Record<string, string>> = {
     retry: "Sake gwada nazari",
     errorAssessmentFailed:
       "Ba a iya nazarin amfanin gonar ba. Don Allah sake gwadawa.",
+    assessmentQueued:
+      "Aikin nazari yana aiki. An ajiye saƙonka kuma za a sake gwadawa kai tsaye; za ka iya sake gwadawa yanzu.",
     errorInvalidImage: "Nau'in hoto bai dace ba. Yi amfani da JPEG, PNG, ko WebP.",
     errorImageTooLarge: "Hoton ya yi girma. Iyaka 10MB.",
     errorMaxImages: "An kai iyakar hotuna 5 a kowace tattaunawa.",
@@ -513,6 +519,8 @@ const translations: Record<Language, Record<string, string>> = {
     retry: "Nwaa nyocha ọzọ",
     errorAssessmentFailed:
       "Enweghị ike inyocha ihe ubi ahụ. Biko nwaa ọzọ.",
+    assessmentQueued:
+      "Ọrụ nyocha nọ na-arụ ọrụ. Echekwara ozi gị, a ga-anwa ọzọ; ị nwekwara ike ịnwa ugbu a.",
     errorInvalidImage: "Ụdị foto ezighi ezi. Jiri JPEG, PNG, ma ọ bụ WebP.",
     errorImageTooLarge: "Foto ahụ buru ibu. Oke 10MB.",
     errorMaxImages: "Eruola foto 5 n'otu mkparịta ụka.",
