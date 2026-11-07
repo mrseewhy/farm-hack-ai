@@ -3,7 +3,11 @@ import { redirect } from "next/navigation";
 import Image from "next/image";
 import { auth } from "@/lib/auth";
 import Link from "next/link";
-import { getAdminConversation } from "@/lib/data/actions/admin";
+import {
+  getAdminConversation,
+  getSafetyReviews,
+} from "@/lib/data/actions/admin";
+import { SafetyReviewForm } from "@/components/app/safety-review-form";
 import { AdminShell } from "@/components/app/admin-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
@@ -75,6 +79,12 @@ export default async function AdminReviewPage({
     assessmentRecords.find((record) => String(record.id) === assessmentId) ??
     assessmentRecords[assessmentRecords.length - 1] ??
     null;
+
+  // Human review history for the flagged assessment. Reviews are append-only,
+  // so the latest decision is shown first.
+  const safetyReviews = assessmentRecord
+    ? await getSafetyReviews(assessmentRecord.id)
+    : [];
 
   let parsedAssessment: Assessment | null = null;
   if (assessmentRecord) {
@@ -176,6 +186,37 @@ export default async function AdminReviewPage({
                 {parsedAssessment.uncertainty.reason}
               </p>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {assessmentRecord && (
+        <Card className="border-border/70 shadow-none mb-6">
+          <CardHeader>
+            <CardTitle className="text-lg">Human safety review</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Record whether this assessment was acceptable, needs follow-up, or
+              is unsafe. Every review is audited.
+            </p>
+          </CardHeader>
+          <CardContent className="p-4 space-y-4">
+            {safetyReviews.length > 0 && (
+              <ul className="space-y-2">
+                {safetyReviews.map((review) => (
+                  <li
+                    key={review.id}
+                    className="rounded-lg border border-border/70 p-3 text-sm"
+                  >
+                    <p className="font-semibold">{review.decision}</p>
+                    <p className="text-muted-foreground">{review.notes}</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {new Date(review.createdAt).toLocaleString()}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <SafetyReviewForm assessmentId={assessmentRecord.id} />
           </CardContent>
         </Card>
       )}

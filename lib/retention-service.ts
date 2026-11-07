@@ -1,11 +1,8 @@
 import { db } from "@/lib/data/dal";
 import {
-  aiEvents,
   conversations,
-  errorEvents,
   messageImages,
   messages,
-  operationalAlerts,
   retentionRuns,
 } from "@/lib/data/dal/schema";
 import { eq, lt, sql } from "drizzle-orm";

@@ -15,6 +15,7 @@ import {
   type Language,
 } from "@/lib/preferences";
 import { authClient } from "@/lib/auth-client";
+import { exportMyData } from "@/lib/data/actions/export";
 import { t } from "@/lib/i18n";
 
 export function ProfileScreen({
@@ -28,6 +29,8 @@ export function ProfileScreen({
   );
   const [languageNotice, setLanguageNotice] = useState("");
   const [passwordNotice, setPasswordNotice] = useState("");
+  const [exportNotice, setExportNotice] = useState("");
+  const [exportBusy, setExportBusy] = useState(false);
 
   return (
     <div className="min-h-dvh bg-background">
@@ -174,6 +177,61 @@ export function ProfileScreen({
                 )}
                 <Button type="submit">{t("changePasswordButton", language)}</Button>
               </form>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Your data</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Download a copy of your conversations, messages, photos, and
+                assessments. Retention is enforced by a scheduled cleanup, and
+                the notice describes what is stored and for how long.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={exportBusy}
+                  onClick={async () => {
+                    setExportBusy(true);
+                    setExportNotice("");
+                    try {
+                      const data = await exportMyData();
+                      const blob = new Blob([JSON.stringify(data, null, 2)], {
+                        type: "application/json",
+                      });
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement("a");
+                      link.href = url;
+                      link.download = `farmhackai-export-${new Date()
+                        .toISOString()
+                        .slice(0, 10)}.json`;
+                      link.click();
+                      URL.revokeObjectURL(url);
+                      setExportNotice("Export downloaded.");
+                    } catch {
+                      setExportNotice("Could not create the export. Please try again.");
+                    } finally {
+                      setExportBusy(false);
+                    }
+                  }}
+                >
+                  {exportBusy ? "Preparing…" : "Download my data"}
+                </Button>
+                <a
+                  href="/privacy"
+                  className="text-sm font-medium text-primary underline underline-offset-4"
+                >
+                  Privacy and retention notice
+                </a>
+              </div>
+              {exportNotice && (
+                <p role="status" className="text-sm text-muted-foreground">
+                  {exportNotice}
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>

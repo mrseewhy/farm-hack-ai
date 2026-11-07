@@ -19,6 +19,8 @@ import {
 } from "@/lib/preferences";
 import { t } from "@/lib/i18n";
 
+import { CONSENT_HEADER, CONSENT_POLICY_VERSION } from "@/lib/consent";
+
 export function AuthScreen({ mode }: { mode: "login" | "signup" }) {
   const signup = mode === "signup";
   const router = useRouter();
@@ -84,6 +86,14 @@ export function AuthScreen({ mode }: { mode: "login" | "signup" }) {
                         email,
                         password,
                         preferredLanguage,
+                        // The server hook rejects a signup without the current
+                        // policy version, so account creation and consent are
+                        // one atomic step.
+                        fetchOptions: {
+                          headers: {
+                            [CONSENT_HEADER]: CONSENT_POLICY_VERSION,
+                          },
+                        },
                       })
                     : await authClient.signIn.email({ email, password });
                   if (result.error) {
@@ -177,6 +187,31 @@ export function AuthScreen({ mode }: { mode: "login" | "signup" }) {
                   </button>
                 </div>
               </div>
+              {signup && (
+                <div className="flex items-start gap-3">
+                  <input
+                    id="consent"
+                    name="consent"
+                    type="checkbox"
+                    required
+                    className="mt-1 size-4 accent-primary"
+                  />
+                  <Label
+                    htmlFor="consent"
+                    className="text-sm font-normal leading-5 text-muted-foreground"
+                  >
+                    {t("consentAgree", language)}{" "}
+                    <a
+                      href="/privacy"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-medium text-primary underline underline-offset-4"
+                    >
+                      {t("consentReadNotice", language)}
+                    </a>
+                  </Label>
+                </div>
+              )}
               {notice && (
                 <p
                   role="alert"

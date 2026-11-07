@@ -7,7 +7,6 @@ import {
   assessments,
   adminAuditEvents,
   aiEvents,
-  assessmentJobs,
   knowledgeArticles,
   conversations,
   messages,

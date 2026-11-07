@@ -17,6 +17,20 @@ export const CONSENT_PURPOSES = [
   "Email you a follow-up reminder if you opt in to feedback requests",
 ] as const;
 
+/**
+ * Header the signup form sends alongside the Better Auth request.
+ *
+ * A header is used rather than an extra body field because Better Auth strips
+ * unknown body properties before the signup hook runs, and the consent value
+ * must be visible to that hook to reject an account without consent.
+ */
+export const CONSENT_HEADER = "x-farmhack-consent";
+
+/** True only for the currently published policy version. */
+export function isAcceptedConsentVersion(value: unknown): boolean {
+  return typeof value === "string" && value.trim() === CONSENT_POLICY_VERSION;
+}
+
 export type ConsentRecord = {
   consentKey: string;
   policyVersion: string;

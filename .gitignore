@@ -12,6 +12,11 @@
 
 # testing
 /coverage
+/playwright-report/
+/test-results/
+
+# local E2E uploads (written by lib/media.ts in E2E_MODE only)
+/public/e2e-uploads/
 
 # next.js
 /.next/

@@ -26,7 +26,11 @@ import {
 } from "@/lib/monitoring";
 import { estimateCostMicroUsd } from "@/lib/cost";
 import { optimizeImageForModel } from "@/lib/image-optimize";
-import { e2eAssessmentText, isE2eMode } from "@/lib/e2e";
+import {
+  e2eAssessmentText,
+  isE2eMode,
+  shouldForceProviderFailure,
+} from "@/lib/e2e";
 
 // Re-export the contract so server actions keep importing it from "@/lib/ai".
 export type { AssessmentResult } from "@/lib/data/validation/assessment";
@@ -459,6 +463,11 @@ export async function generateRawAssessment(
 
   // Local Playwright mode only; production builds cannot reach this branch.
   if (isE2eMode()) {
+    if (shouldForceProviderFailure(contents)) {
+      throw new Error(
+        "AI assessment is temporarily unavailable (E2E forced provider failure)."
+      );
+    }
     return {
       text: e2eAssessmentText(hasImages),
       model: "e2e-test-model",

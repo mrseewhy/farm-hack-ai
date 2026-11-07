@@ -72,6 +72,84 @@ Open <http://localhost:3000>. `/` redirects by session role.
 | `npm run eval:replay` | Replay the recorded evaluation results and check them against current scoring rules |
 | `npm run eval:record` | Call the live model and record new results (needs `GEMINI_API_KEY`) |
 | `npm run db:check:auth` | Report the configured database host/schema and auth table status |
+| `npm run typecheck` | Generate route types and run `tsc --noEmit` |
+| `npm run test:e2e` | Playwright farmer, upload, auth, export, and admin journeys (needs a PostgreSQL database) |
+| `npm run test:ops` | Cost, retry-queue, alert, retention, cron-auth, header, and consent tests |
+| `npm run test:redteam` | Deterministic safety red-team regression set |
+
+## Engineering and operations
+
+These are the engineering controls around the product, not features. Local
+verification on 2026-11-07: **117 unit tests**, **7 Playwright journeys** against
+local PostgreSQL, TypeScript, ESLint, and a production build all pass. The
+GitHub Actions workflow itself has not yet run on a hosted runner.
+
+- **CI.** [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) runs four jobs:
+  typecheck/lint/unit tests/production build; PostgreSQL migration gate plus the
+  rolled-back database integration tests; Playwright journeys; and a production
+  dependency audit with a gitleaks secret scan. The migration gate regenerates
+  Drizzle migrations and fails if `drizzle/` changes, so code and the deployed
+  schema cannot drift.
+- **End-to-end tests.** [`playwright.config.ts`](./playwright.config.ts) and
+  [`e2e/`](./e2e) cover signup, consent rejection, chat, text and photo
+  assessments, reload persistence, farmer admin-route denial, data export, the
+  admin dashboard, and a persisted human safety review. `E2E_MODE=1` replaces
+  the model with a deterministic fixture and stores uploads under
+  `public/e2e-uploads`; `lib/e2e.ts` refuses that mode outside development. The
+  suite needs a real (preferably local) PostgreSQL database:
+  `DATABASE_URL=postgresql://… BETTER_AUTH_SECRET=… npm run test:e2e`
+  (see `.env.e2e.local`, git-ignored, for a local example).
+- **Error tracking and alerting.** `instrumentation.ts` records bounded server
+  errors (route shape, message, digest, stack hash — never bodies or cookies) in
+  `error_events`. The protected `/api/cron/health` route evaluates error rate,
+  p95 latency, quota failures, degraded runs, server-error spikes, and retry
+  backlog every 10 minutes, deduplicates alerts for 30 minutes, and delivers to
+  `ALERT_WEBHOOK_URL` and/or Resend email. Delivery failures are stored on the
+  alert row rather than swallowed.
+- **Cost and percentile reporting.** `ai_events` now stores provider token
+  counts and an estimated integer micro-USD cost at configured rates. The admin
+  dashboard shows p50/p95 latency, cost per assessment, quota failures, queue
+  depth, image byte savings, and a 14-day cost/error/latency trend.
+- **Asynchronous retry path.** If every provider candidate fails, the farmer's
+  message stays saved and an `assessment_jobs` row is queued. The protected
+  `/api/cron/retry-assessments` worker claims due jobs with
+  `FOR UPDATE SKIP LOCKED`, retries with 1 min → 6 h backoff, and marks exhausted
+  jobs dead (which raises an alert). The first attempt is still synchronous.
+- **Pre-model image optimisation.** Uploaded photos are fetched with a timeout,
+  signature-checked, auto-rotated, checked for minimum size and sane aspect
+  ratio, downscaled to a 1280 px long edge, and re-encoded as JPEG at quality 82
+  with metadata stripped. Telemetry records original and sent bytes.
+- **Security headers.** `next.config.ts` applies CSP, HSTS, `X-Frame-Options`,
+  `X-Content-Type-Options`, `Referrer-Policy`, `Cross-Origin-Opener-Policy`, and
+  `Permissions-Policy` to every route. The CSP still allows inline scripts
+  because Next.js and the theme initialiser inject them; a nonce-based policy is
+  a documented next step, not a claim of a strict CSP.
+- **Human safety loop.** Medium/high-uncertainty assessments appear in the
+  admin review queue, where an admin records `approved`, `needs_follow_up`, or
+  `unsafe` in `safety_reviews` (audited). `scripts/red-team.test.mjs` pins
+  adversarial pesticide, dosage, diagnosis, and localized-language cases plus a
+  benign false-positive guard.
+- **Retention, consent, and export.** A daily `/api/cron/retention` job deletes
+  expired conversations (stored media first, then rows) and old telemetry and
+  error records. Signup requires the current consent policy version and writes an
+  append-only record; `/privacy` publishes the enforced retention values; and
+  Profile & settings downloads the farmer's own data as JSON.
+
+### Scheduled routes
+
+[`vercel.json`](./vercel.json) schedules the workers:
+
+| Route | Schedule | Purpose |
+| --- | --- | --- |
+| `/api/cron/retry-assessments` | every 5 minutes | Retry queued assessments |
+| `/api/cron/health` | every 10 minutes | Evaluate thresholds and deliver alerts |
+| `/api/cron/retention` | daily at 03:00 | Enforce retention |
+
+All three require `Authorization: Bearer $CRON_SECRET`; without the secret they
+return 503 rather than exposing destructive work. Vercel sends that header when
+`CRON_SECRET` is set on the project. Vercel's Hobby plan limits cron frequency,
+so the 5- and 10-minute schedules require a plan that supports them; otherwise
+the workers can be triggered by any external scheduler.
 
 ## Architecture
 
@@ -129,6 +207,15 @@ Never commit `.env`. Required unless noted.
 | `GEMINI_FALLBACK_MODELS` | Comma-separated fallbacks tried in order on overload/quota; defaults to `gemini-3.6-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite` | No |
 | `AI_MAX_ASSESSMENTS_PER_DAY` | Rolling per-user assessment cap; defaults to `20`, clamped to `[1, 500]` | No |
 | `AI_FOLLOW_UP_REMINDER_HOURS` | Hours before an assessment becomes a follow-up reminder; defaults to `48`, clamped to `[1, 720]` | No |
+| `CRON_SECRET` | Bearer secret for the scheduled routes; without it they return 503 | Yes (for scheduled jobs) |
+| `ALERT_WEBHOOK_URL` | Slack/Discord/PagerDuty-compatible webhook for operational alerts | No |
+| `ALERT_EMAIL_TO` | Comma-separated alert recipients (uses `RESEND_API_KEY` and `EMAIL_FROM`) | No |
+| `GEMINI_INPUT_COST_PER_M_USD` | USD per million input tokens for the cost estimate; default `0.3` | No |
+| `GEMINI_OUTPUT_COST_PER_M_USD` | USD per million output tokens for the cost estimate; default `2.5` | No |
+| `RETENTION_CONVERSATION_DAYS` | Days after last activity before a conversation is deleted; default `365` | No |
+| `RETENTION_TELEMETRY_DAYS` | Days before telemetry and alert rows are deleted; default `400` | No |
+| `RETENTION_ERROR_DAYS` | Days before server error records are deleted; default `90` | No |
+| `E2E_MODE` | Local/CI Playwright only: replaces the model and stores uploads locally; refused outside development | No |
 | `RESEND_API_KEY` | Resend API key for email verification | No (disabled) |
 | `EMAIL_FROM` | From address for emails | No (disabled) |
 
@@ -176,7 +263,10 @@ Retrieval is crop-scoped: an assessment receives only guidance matching the conv
 - **Conversations, messages, photos, and assessments.** Stored so a farmer can revisit their history. A farmer can delete a conversation; deletion cascades to its messages, assessments, and follow-ups, and server-side code deletes the associated Cloudinary media before removing database rows. Deleting a message also removes its attached image record.
 - **AI telemetry.** `ai_events` records model, prompt version, validation outcome, latency, and safety flags for monitoring. These rows carry no image data and are not used for diagnosis.
 - **Admin access.** Admin actions are recorded in `admin_audit_events`. Admins can view conversations only through the audited review flow.
-- No location data is collected. This is a prototype policy, not a legal compliance statement; define a formal retention period and a data-deletion request process before any real deployment.
+- **Enforcement.** The daily retention worker deletes conversations past their configured retention window (media first, then rows) plus expired telemetry, alerts, and error records, in bounded batches, and writes an audit row per run.
+- **Consent.** Signup requires the current consent policy version, and the auth hook writes an append-only `user_consents` record. The published notice at `/privacy` uses the same enforced retention values.
+- **Export.** Profile & settings downloads the farmer's own conversations, messages, images, assessments, and feedback as JSON.
+- No location data is collected. This is a prototype policy enforced by the code above, not a legal compliance statement; define a formal data-deletion request process and obtain legal review before any real deployment.
 
 ## Email verification (currently disabled)
 

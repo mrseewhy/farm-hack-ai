@@ -88,7 +88,13 @@ erDiagram
 - `assessments` — structured result JSON, model, prompt version, and the source/assistant message ids. A unique constraint allows one assessment per source message.
 - `follow_ups` — farmer outcome feedback (`outcome`, `helpful`, free-text observation).
 - `knowledge_articles` — guidance with provenance (`source_backed` / `expert_reviewed`) and source metadata.
-- `ai_events` — privacy-conscious telemetry (no farmer text, prompts, model output, or image URLs).
+- `ai_events` — privacy-conscious telemetry (no farmer text, prompts, model output, or image URLs), including token counts, estimated cost, and image byte savings.
+- `assessment_jobs` — retry-later queue with attempts, availability, and dead-letter state.
+- `safety_reviews` — human decisions on flagged assessments.
+- `error_events` — bounded server errors from `onRequestError` (no bodies, cookies, query strings, or raw stacks).
+- `operational_alerts` — fired alerts, including delivery outcome.
+- `retention_runs` — audit trail for scheduled deletion.
+- `user_consents` — append-only consent records with policy version.
 - `admin_audit_events` — admin actions.
 
 Deletions cascade: removing a conversation removes its messages, assessments, and follow-ups; removing a message removes its images; Cloudinary media is deleted before database rows.
@@ -102,8 +108,27 @@ Deletions cascade: removing a conversation removes its messages, assessments, an
 | Server → Cloudinary | Server | Image bytes; secrets never leave the server. |
 | Admin UI → server | Server | Every admin action re-checks the admin role. |
 
+## Operational and enforcement layer
+
+| Concern | Implementation |
+| --- | --- |
+| Scheduled retries | `/api/cron/retry-assessments` claims `assessment_jobs` with `FOR UPDATE SKIP LOCKED` and uses bounded backoff; exhausted jobs become dead and raise an alert. |
+| Alerting | `/api/cron/health` evaluates error rate, p95 latency, quota failures, degraded rate, server-error spikes, and queue depth, with a 30-minute per-alert cooldown, then delivers to a webhook and/or email. |
+| Error tracking | `instrumentation.ts` records a bounded message, route shape, digest, and stack hash. No request body or cookie is stored. |
+| Cost/percentiles | `ai_events` carries provider tokens and estimated micro-USD; the admin summary computes p50/p95 and cost per assessment in SQL. |
+| Image handling | The model receives a downscaled JPEG (1280 px long edge, q82) after quality checks, not the original asset. |
+| Headers | CSP, HSTS, framing, referrer, permissions, and content-type policies are applied in `next.config.ts`. |
+| Retention | The daily retention worker deletes media before rows and audits each batch in `retention_runs`. |
+| Consent | Signup is rejected without the current policy version; the auth hook writes `user_consents`. Farmers can export their data from Profile. |
+
+All scheduled routes require `Authorization: Bearer $CRON_SECRET` and return 503 when the secret is absent.
+
 ## Known gaps
 
+- The GitHub Actions workflow has not yet run on a hosted runner; its commands were executed locally.
+- The CSP still allows inline scripts; a per-request nonce policy is outstanding.
+- Alert thresholds are sensible defaults, not tuned against production traffic.
+- Cost is an estimate at configured rates, not a billing record.
 - Guidance is source-backed, not expert-reviewed; citations are rendered in the farmer UI so this is visible.
 - Guided intake is suggestion-based; there is no validated step-by-step questionnaire.
 - Follow-up reminders are in-app only (no SMS/email/push) and time-based rather than outcome-driven.

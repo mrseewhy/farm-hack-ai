@@ -20,6 +20,27 @@ export function isE2eMode(): boolean {
 }
 
 /**
+ * Test-only fault injection marker.
+ *
+ * A Playwright case needs to exercise the "provider failed, message queued for
+ * retry" path. The marker is only honoured when `isE2eMode()` is true, so a
+ * production build can never reach it.
+ */
+export const E2E_FORCE_FAILURE_MARKER = "e2e-force-provider-failure";
+
+export function shouldForceProviderFailure(
+  contents: Array<{ parts: Array<{ text?: string; inlineData?: unknown }> }>
+): boolean {
+  return contents.some((turn) =>
+    turn.parts.some(
+      (part) =>
+        typeof part.text === "string" &&
+        part.text.toLowerCase().includes(E2E_FORCE_FAILURE_MARKER)
+    )
+  );
+}
+
+/**
  * A valid, deliberately conservative assessment fixture. It exercises the
  * normal schema/safety path and remains useful when a test asserts the UI.
  */

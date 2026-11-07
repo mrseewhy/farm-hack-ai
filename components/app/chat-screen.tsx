@@ -298,6 +298,10 @@ export function ChatScreen({
         });
         convId = newConv.id;
         setCurrentConversationId(convId);
+        // Keep the URL on the saved conversation so a reload restores it.
+        // replaceState avoids a router navigation that would remount the screen
+        // while the optimistic message and assessment are still in flight.
+        window.history.replaceState(null, "", `/chat/${convId}`);
         setActiveConversation({
           id: newConv.id,
           userId: "",

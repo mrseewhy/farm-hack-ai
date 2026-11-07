@@ -1,4 +1,4 @@
-import sharp from "sharp";
+import sharp, { type Metadata } from "sharp";
 
 /**
  * Pre-model image normalisation.
@@ -45,7 +45,7 @@ export async function optimizeImageForModel(
     throw new ImageQualityError("Image is empty");
   }
 
-  let metadata: sharp.Metadata;
+  let metadata: Metadata;
   try {
     metadata = await sharp(input).metadata();
   } catch {

@@ -14,7 +14,7 @@ import { defineConfig, devices } from "@playwright/test";
  * covered by the evaluation harness.
  */
 const PORT = Number(process.env.E2E_PORT ?? 3100);
-const baseURL = process.env.E2E_BASE_URL ?? `http://127.0.0.1:${PORT}`;
+const baseURL = process.env.E2E_BASE_URL ?? `http://localhost:${PORT}`;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -33,6 +33,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  globalSetup: "./e2e/global-setup.ts",
   webServer: {
     command: `npm run dev -- --port ${PORT}`,
     url: `${baseURL}/login`,
@@ -42,6 +43,9 @@ export default defineConfig({
       E2E_MODE: "1",
       E2E_BASE_URL: baseURL,
       BETTER_AUTH_URL: baseURL,
+      ...(process.env.DATABASE_URL
+        ? { DATABASE_URL: process.env.DATABASE_URL }
+        : {}),
     },
   },
 });

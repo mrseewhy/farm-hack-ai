@@ -45,6 +45,9 @@ const translations: Record<Language, Record<string, string>> = {
     pleaseWait: "Please wait...",
     errorAuthGeneric: "Could not access your account. Please try again.",
     errorConnection: "Could not connect. Check your connection and try again.",
+    consentAgree:
+      "I agree to the privacy and data-processing notice.",
+    consentReadNotice: "Read the notice",
 
     // Navigation
     newChat: "New chat",
@@ -193,6 +196,9 @@ const translations: Record<Language, Record<string, string>> = {
       "A kò lè wọlé sí àkọsílẹ̀ rẹ. Jọ̀wọ́ gbìyànjú lẹ́ẹ̀kan sí i.",
     errorConnection:
       "A kò lè sopọ̀. Jọ̀wọ́ yẹ̀wò ìsopọ̀ rẹ kí o sì gbìyànjú lẹ́ẹ̀kan sí i.",
+    consentAgree:
+      "Mo gbà pẹ̀lú ìkéde àṣírí àti ìlànà lílo dátà.",
+    consentReadNotice: "Ka ìkéde náà",
 
     // Navigation
     newChat: "Ìjíròrò tuntun",
@@ -343,6 +349,9 @@ const translations: Record<Language, Record<string, string>> = {
     errorAuthGeneric: "Ba a iya shiga asusunka ba. Don Allah sake gwadawa.",
     errorConnection:
       "Ba a iya haɗawa ba. Duba haɗin yanar gizonka ka sake gwadawa.",
+    consentAgree:
+      "Na yarda da sanarwar sirri da sarrafa bayanai.",
+    consentReadNotice: "Karanta sanarwar",
 
     // Navigation
     newChat: "Sabuwar tattaunawa",
@@ -492,6 +501,9 @@ const translations: Record<Language, Record<string, string>> = {
     errorAuthGeneric: "Enweghị ike ịbanye na akaụntụ gị. Biko nwaa ọzọ.",
     errorConnection:
       "Enweghị ike ijikọ. Lelee njikọ ịntanetị gị ma nwaa ọzọ.",
+    consentAgree:
+      "Ekwenyere m na ọkwa nzuzo na nhazi data.",
+    consentReadNotice: "Gụọ ọkwa ahụ",
 
     // Navigation
     newChat: "Mkparịta ụka ọhụrụ",
