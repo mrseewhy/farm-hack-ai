@@ -123,7 +123,7 @@ test("formatGuidanceContext returns empty string when there is nothing usable", 
 test("formatGuidanceContext labels provenance and includes source attribution", () => {
   const context = formatGuidanceContext([sourceBacked, expertReviewed]);
 
-  assert.match(context, /CURATED TOMATO REFERENCE/);
+  assert.match(context, /CURATED PLANT REFERENCE/);
   assert.match(context, /provenance: source_backed/);
   assert.match(context, /provenance: expert_reviewed/);
   assert.match(context, /Source URL: https:\/\/ipm\.ucanr\.edu/);

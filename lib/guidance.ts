@@ -217,7 +217,7 @@ export function formatGuidanceContext(
 
   const lines: string[] = [
     "",
-    "CURATED TOMATO REFERENCE (background only, not a diagnosis):",
+    "CURATED PLANT REFERENCE (background only, not a diagnosis):",
     "Source-backed entries are paraphrased from a cited public source and have NOT been reviewed by an agricultural expert. Expert-reviewed entries were reviewed by a named expert. Never describe source-backed guidance as expert-reviewed, and never present any of this as a definite diagnosis.",
   ];
 

@@ -1,7 +1,7 @@
 # Fellowship application — FarmHack AI
 
 **Applicant:** Olusegun Adeyemi
-**Project:** FarmHack AI — multilingual, evidence-grounded crop guidance for smallholder tomato farmers
+**Project:** FarmHack AI — multilingual, evidence-grounded plant guidance for smallholder farmers
 **Live application:** <https://farm-hack-ai.vercel.app/>
 **Source code:** <https://github.com/mrseewhy/farm-hack-ai>
 **Date:** 2026-11-07
@@ -149,7 +149,7 @@ The evaluation also found real defects, which I fixed and re-tested:
 
 - **No agricultural expert or expert-labelled dataset.** Assessments are preliminary and
   unverified. The project makes no accuracy, sensitivity, or specificity claim.
-- **Tomato only.** Other crops are intentionally unsupported until validated.
+- **Any plant input, tomato-only curated guidance.** Chat accepts any plant; curated references and the evaluation set remain tomato-scoped until other plants have reviewed guidance.
 - **Synthetic evaluation.** The 38/38 result measures structural and safety behaviour on
   synthetic inputs, not diagnostic quality.
 - **Guidance is source-backed, not expert-reviewed.** The articles are paraphrased from

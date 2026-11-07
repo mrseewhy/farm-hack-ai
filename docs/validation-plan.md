@@ -50,11 +50,11 @@ Do **not** report a pass rate on the synthetic set as an accuracy figure.
 | Guidance published to farmers | Expert review of every published article; provenance fields complete |
 | Broader pilot | Native-speaker sign-off on the four languages; consented protocol; incident process live |
 | Any accuracy claim | Expert-labelled image/text set and a measured, pre-registered evaluation |
-| Expansion beyond tomato | Crop-specific reviewed guidance and a passing crop-specific evaluation |
+| Adding another plant's guidance | Plant-specific reviewed guidance, retrieval scoped to that plant, and a passing plant-specific evaluation |
 
 ## Open limitations carried forward
 
-- Guidance citations are rendered as source-backed references, not expert review; every published article still needs qualified review.
+- Guidance references stay in the admin workspace rather than the farmer view; provenance is source-backed, not expert review; every published article still needs qualified review.
 - Guided intake is suggestion-based, and reminders are in-app only; neither replaces a clinical intake or a reminder channel.
 - Mobile performance is measured on desktop/dev; low-end device and throttled-network profiling is still required.
 - Free-tier model quota constrains live evaluation and pilot volume; billing is required for scale.

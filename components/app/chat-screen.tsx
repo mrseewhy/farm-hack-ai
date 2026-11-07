@@ -5,8 +5,33 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
-import { ArrowUp, Bell, Camera, Menu, Plus, Settings, Sprout, X, RefreshCw } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowUp,
+  Bell,
+  Bug,
+  Camera,
+  Carrot,
+  CircleDot,
+  Droplets,
+  Eye,
+  Info,
+  Leaf,
+  ListChecks,
+  Menu,
+  Plus,
+  RefreshCw,
+  RotateCw,
+  Scan,
+  Search,
+  Settings,
+  Sprout,
+  Sun,
+  Wheat,
+  X,
+} from "lucide-react";
 import { Brand } from "@/components/app/brand";
+import { PlantIllustration } from "@/components/app/plant-illustration";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -57,18 +82,6 @@ export type Message = {
       total: number;
       failed: number;
     };
-    citations?: Array<{
-      index: number;
-      problem: string;
-      provenance: "source_backed" | "expert_reviewed";
-      publisher?: string;
-      title?: string;
-      url?: string;
-      accessedAt?: string;
-      license?: string;
-      reviewer?: string;
-      reviewedAt?: string;
-    }>;
   };
 };
 
@@ -86,14 +99,63 @@ type Conversation = {
  * so tapping one composes the farmer's draft in their own language.
  */
 const GUIDED_SYMPTOMS = [
-  "symptomYellowLeaves",
-  "symptomDarkSpots",
-  "symptomWilting",
-  "symptomHoles",
-  "symptomInsects",
-  "symptomLeafCurl",
-  "symptomFruitRot",
+  { key: "symptomYellowLeaves", Icon: Sun },
+  { key: "symptomDarkSpots", Icon: CircleDot },
+  { key: "symptomWilting", Icon: Droplets },
+  { key: "symptomHoles", Icon: Scan },
+  { key: "symptomInsects", Icon: Bug },
+  { key: "symptomLeafCurl", Icon: RotateCw },
+  { key: "symptomFruitRot", Icon: Carrot },
 ] as const;
+
+/**
+ * Plant choices. Icons make the choice recognisable without reading, and
+ * "plant" keeps the assistant usable when the farmer does not know the name.
+ */
+const PLANT_OPTIONS = [
+  { value: "tomato", labelKey: "plantTomato", Icon: CircleDot },
+  { value: "pepper", labelKey: "plantPepper", Icon: Leaf },
+  { value: "maize", labelKey: "plantMaize", Icon: Wheat },
+  { value: "cassava", labelKey: "plantCassava", Icon: Sprout },
+  { value: "yam", labelKey: "plantYam", Icon: Carrot },
+  { value: "plant", labelKey: "plantOther", Icon: Scan },
+] as const;
+
+/** One compact, icon-led section of an assessment. */
+function AssessmentRow({
+  icon,
+  title,
+  tone = "default",
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  tone?: "default" | "warn";
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex gap-2.5">
+      <span
+        className={cn(
+          "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full",
+          tone === "warn"
+            ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+            : "bg-primary/10 text-primary"
+        )}
+      >
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {title}
+        </p>
+        <div className="mt-1 space-y-1 text-xs leading-5 text-foreground/85">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 type Reminder = {
   conversationId: number;
@@ -138,6 +200,7 @@ export function ChatScreen({
   const fileRef = useRef<HTMLInputElement>(null);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(initialConversation ?? null);
+  const [plant, setPlant] = useState<string>(initialConversation?.crop ?? "plant");
   const [reminder, setReminder] = useState<Reminder | null>(null);
   const [reminderDismissed, setReminderDismissed] = useState(false);
 
@@ -219,6 +282,7 @@ export function ChatScreen({
         updatedAt: conversation.updatedAt,
       });
       setMessages(conversation.messages as Message[]);
+      setPlant(conversation.crop);
       setDraft("");
       setUploadingFile(null);
       setUploadPreview(null);
@@ -293,7 +357,7 @@ export function ChatScreen({
       if (!convId) {
         const newConv = await createConversation({
           title: draft.trim().slice(0, 50) || "New conversation",
-          crop: "tomato",
+          crop: plant,
           language,
         });
         convId = newConv.id;
@@ -700,9 +764,7 @@ export function ChatScreen({
           >
             {!messages.length ? (
               <div className="mb-8 text-center">
-                <div className="mx-auto mb-5 flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                  <Sprout className="size-7" />
-                </div>
+                <PlantIllustration className="mx-auto mb-4 h-32 w-44" />
                 <p className="mb-2 text-sm font-semibold text-primary">{t("yourCropCompanion", language)}</p>
                 <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
                   {t("whatIsHappening", language)}
@@ -710,29 +772,59 @@ export function ChatScreen({
                 <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-muted-foreground sm:text-base">
                   {t("describeSigns", language)}
                 </p>
-                <div className="mx-auto mt-7 max-w-md">
-                  <p className="text-sm font-semibold text-primary">{t("guidedTitle", language)}</p>
-                  <p className="mt-1 mb-3 text-xs text-muted-foreground">{t("guidedHint", language)}</p>
-                  <div className="flex flex-wrap justify-center gap-2">
-                    {GUIDED_SYMPTOMS.map((key) => (
+                <div className="mx-auto mt-7 max-w-lg">
+                  <p className="text-sm font-semibold text-primary">{t("plantQuestion", language)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{t("plantHint", language)}</p>
+                  <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
+                    {PLANT_OPTIONS.map(({ value, labelKey, Icon }) => (
                       <button
-                        key={key}
+                        key={value}
                         type="button"
-                        onClick={() => addSymptom(t(key, language))}
-                        className="rounded-full border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        aria-pressed={plant === value}
+                        onClick={() => setPlant(value)}
+                        className={cn(
+                          "flex flex-col items-center gap-1 rounded-xl border px-2 py-2.5 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          plant === value
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "bg-card text-muted-foreground hover:border-primary/50"
+                        )}
                       >
-                        {t(key, language)}
+                        <Icon className="size-4" />
+                        {t(labelKey, language)}
                       </button>
                     ))}
                   </div>
                 </div>
-                <div className="mt-8 max-w-sm mx-auto">
-                  <h2 className="text-sm font-semibold text-primary mb-2">{t("photoTips", language)}</h2>
-                  <ul className="text-sm text-muted-foreground space-y-2 list-disc pl-4">
-                    <li>{t("tipWholePlant", language)}</li>
-                    <li>{t("tipAffectedPart", language)}</li>
-                    <li>{t("tipGoodLighting", language)}</li>
-                  </ul>
+                <div className="mx-auto mt-6 max-w-md">
+                  <p className="text-sm font-semibold text-primary">{t("guidedTitle", language)}</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {GUIDED_SYMPTOMS.map(({ key, Icon }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => addSymptom(t(key, language))}
+                        className="flex items-center gap-2 rounded-xl border bg-card px-2.5 py-2 text-left text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <Icon className="size-4 shrink-0 text-primary" />
+                        <span>{t(key, language)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="mt-6 grid gap-2 text-left sm:grid-cols-3">
+                  {[
+                    { Icon: Scan, text: t("tipWholePlant", language) },
+                    { Icon: Camera, text: t("tipAffectedPart", language) },
+                    { Icon: Sun, text: t("tipGoodLighting", language) },
+                  ].map(({ Icon, text }) => (
+                    <div
+                      key={text}
+                      className="flex items-center gap-2 rounded-xl bg-muted/60 px-3 py-2 text-[11px] leading-4 text-muted-foreground"
+                    >
+                      <Icon className="size-4 shrink-0 text-primary" />
+                      <span>{text}</span>
+                    </div>
+                  ))}
                 </div>
                 <p className="mx-auto mt-8 max-w-md text-xs leading-5 text-muted-foreground">
                   {t("limitationsNotice", language)}
@@ -786,107 +878,98 @@ export function ChatScreen({
                                 {t("imageNotExamined", language)}
                               </div>
                             )}
-                          {message.assessment.observedSigns.length > 0 && (
-                            <div className="mb-2">
-                              <p className="text-xs font-semibold text-primary mb-1">{t("observedSigns", language)}</p>
-                              <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
-                                {message.assessment.observedSigns.map((sign) => (
-                                  <li key={sign}>{sign}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                          {message.assessment.possibleCauses.length > 0 && (
-                            <div className="mb-2">
-                              <p className="text-xs font-semibold text-primary mb-1">{t("possibleCauses", language)}</p>
-                              <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
-                                {message.assessment.possibleCauses.map((cause) => (
-                                  <li key={cause}>{cause}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                          {message.assessment.followUpQuestions.length > 0 && (
-                            <div className="mb-2">
-                              <p className="text-xs font-semibold text-primary mb-1">{t("thingsToCheck", language)}</p>
-                              <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
-                                {message.assessment.followUpQuestions.map((q) => (
-                                  <li key={q}>{q}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                          {message.assessment.immediateActions.length > 0 && (
-                            <div className="mb-2">
-                              <p className="text-xs font-semibold text-primary mb-1">{t("suggestedActions", language)}</p>
-                              <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
-                                {message.assessment.immediateActions.map((a) => (
-                                  <li key={a}>{a}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
+                          <div className="space-y-3">
+                            {message.assessment.immediateActions.length > 0 && (
+                              <AssessmentRow
+                                icon={<ListChecks className="size-3.5" />}
+                                title={t("suggestedActions", language)}
+                              >
+                                <ol className="space-y-1">
+                                  {message.assessment.immediateActions.map(
+                                    (action, index) => (
+                                      <li key={action} className="flex gap-2">
+                                        <span className="font-semibold text-primary">
+                                          {index + 1}.
+                                        </span>
+                                        <span>{action}</span>
+                                      </li>
+                                    )
+                                  )}
+                                </ol>
+                              </AssessmentRow>
+                            )}
+                            {message.assessment.observedSigns.length > 0 && (
+                              <AssessmentRow
+                                icon={<Eye className="size-3.5" />}
+                                title={t("observedSigns", language)}
+                              >
+                                <ul className="space-y-1">
+                                  {message.assessment.observedSigns.map(
+                                    (sign) => (
+                                      <li key={sign} className="flex gap-2">
+                                        <Leaf className="mt-0.5 size-3 shrink-0 text-primary/70" />
+                                        <span>{sign}</span>
+                                      </li>
+                                    )
+                                  )}
+                                </ul>
+                              </AssessmentRow>
+                            )}
+                            {message.assessment.possibleCauses.length > 0 && (
+                              <AssessmentRow
+                                icon={<Info className="size-3.5" />}
+                                title={t("possibleCauses", language)}
+                              >
+                                <ul className="space-y-1">
+                                  {message.assessment.possibleCauses.map(
+                                    (cause) => (
+                                      <li key={cause}>{cause}</li>
+                                    )
+                                  )}
+                                </ul>
+                              </AssessmentRow>
+                            )}
+                            {message.assessment.followUpQuestions.length > 0 && (
+                              <AssessmentRow
+                                icon={<Search className="size-3.5" />}
+                                title={t("thingsToCheck", language)}
+                              >
+                                <ul className="space-y-1">
+                                  {message.assessment.followUpQuestions.map(
+                                    (question) => (
+                                      <li key={question}>{question}</li>
+                                    )
+                                  )}
+                                </ul>
+                              </AssessmentRow>
+                            )}
+                          </div>
                           {message.assessment.whenToSeekHelp && (
-                            <div className="mb-2">
-                              <p className="text-xs font-semibold text-primary mb-1">{t("whenToSeekHelp", language)}</p>
-                              <p className="text-xs text-muted-foreground">{message.assessment.whenToSeekHelp}</p>
+                            <div className="mt-3">
+                              <AssessmentRow
+                                icon={<AlertTriangle className="size-3.5" />}
+                                title={t("whenToSeekHelp", language)}
+                                tone="warn"
+                              >
+                                <p>{message.assessment.whenToSeekHelp}</p>
+                              </AssessmentRow>
                             </div>
                           )}
                           {message.assessment.uncertainty.level !== "low" && (
-                            <div className="mb-2">
-                              <p className="text-xs font-semibold text-primary mb-1">{t("uncertainty", language)}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {message.assessment.uncertainty.level} — {message.assessment.uncertainty.reason}
-                              </p>
+                            <div className="mt-2">
+                              <AssessmentRow
+                                icon={<Info className="size-3.5" />}
+                                title={t("uncertainty", language)}
+                                tone="warn"
+                              >
+                                <p>
+                                  {message.assessment.uncertainty.level} —{" "}
+                                  {message.assessment.uncertainty.reason}
+                                </p>
+                              </AssessmentRow>
                             </div>
                           )}
-                          {message.assessment.citations &&
-                            message.assessment.citations.length > 0 && (
-                              <div className="mb-2">
-                                <p className="text-xs font-semibold text-primary mb-1">
-                                  {t("sourcesTitle", language)}
-                                </p>
-                                <ul className="space-y-1.5">
-                                  {message.assessment.citations.map((citation) => (
-                                    <li
-                                      key={citation.index}
-                                      className="text-[11px] leading-4 text-muted-foreground"
-                                    >
-                                      <span className="font-medium text-foreground/80">
-                                        [{citation.index}] {citation.problem}
-                                      </span>
-                                      {citation.provenance === "expert_reviewed" ? (
-                                        <span className="block">
-                                          {t("sourceExpertReviewed", language)}
-                                          {citation.reviewer ? ` — ${citation.reviewer}` : ""}
-                                          {citation.reviewedAt ? ` · ${citation.reviewedAt}` : ""}
-                                        </span>
-                                      ) : (
-                                        <span className="block">
-                                          {t("sourceBackedLabel", language)}
-                                          {citation.publisher ? ` — ${citation.publisher}` : ""}
-                                          {citation.title ? ` · ${citation.title}` : ""}
-                                          {citation.accessedAt
-                                            ? ` · ${t("sourceAccessed", language)} ${citation.accessedAt}`
-                                            : ""}
-                                        </span>
-                                      )}
-                                      {citation.url && (
-                                        <a
-                                          href={citation.url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="break-all text-primary underline underline-offset-2"
-                                        >
-                                          {citation.url}
-                                        </a>
-                                      )}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                          <p className="mt-2 text-[11px] leading-4 text-muted-foreground/80">
+                          <p className="mt-3 text-[11px] leading-4 text-muted-foreground/80">
                             {t("limitationsNotice", language)}
                           </p>
                           {feedbackSubmitted !== message.id &&

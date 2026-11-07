@@ -23,11 +23,17 @@ export const pool = new Pool({
 export const auth = betterAuth({
   database: pool,
   emailAndPassword: { enabled: true },
-  // IP-based rate limiting to prevent auth endpoint spam
+  // IP-based rate limiting to prevent auth endpoint spam. Better Auth applies
+  // its own 3-per-10s rule to /sign-up, which the global max cannot raise, so
+  // the local E2E suite (several accounts from one IP) gets an explicit rule.
+  // `isE2eMode()` is false outside local development/E2E.
   rateLimit: {
     enabled: true,
     window: 60,
-    max: 30,
+    max: isE2eMode() ? 200 : 30,
+    ...(isE2eMode()
+      ? { customRules: { "/sign-up/email": { window: 60, max: 200 } } }
+      : {}),
   },
   // emailVerification: {
   //   enabled: true,

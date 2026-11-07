@@ -17,7 +17,7 @@
  */
 
 /** Bump when the system prompt or output contract changes. */
-export const PROMPT_VERSION = "assessment-v2";
+export const PROMPT_VERSION = "assessment-v3";
 
 export type AiValidationOutcome = "valid" | "recovered" | "invalid";
 

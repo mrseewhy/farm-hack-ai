@@ -1,12 +1,12 @@
 # FarmHack AI
 
-FarmHack AI is a multilingual crop-guidance assistant for smallholder farmers in Nigeria. A farmer describes a problem with their **tomato** crop in English, Yoruba, Hausa, or Igbo, optionally attaches a leaf photo, and receives a structured, cautious preliminary assessment: observed signs, possible causes, questions to check, suggested actions, when to seek local help, and an explicit uncertainty level.
+FarmHack AI is a multilingual plant-guidance assistant for smallholder farmers in Nigeria. A farmer describes a problem with **any food or garden plant** — tomato, pepper, maize, cassava, yam, beans, plantain, fruit trees, and others — in English, Yoruba, Hausa, or Igbo, optionally attaches a leaf photo, and receives a short, icon-led, cautious preliminary assessment: what to try now, observed signs, possible causes, questions to check, when to seek local help, and an explicit uncertainty level.
 
 The project is deliberately framed as **preliminary AI guidance, not a confirmed diagnosis**. No agricultural expert or expert-labelled dataset was available, so the emphasis is on responsible AI engineering: structured outputs, multilanguage safety filtering, traceable public guidance, reproducible evaluation, and honest limitations.
 
 ## What is here
 
-- **Farmer app** (`/chat`, `/chat/[id]`, `/profile`) — a mobile-friendly chat with photo upload, a structured assessment card, language switch, and outcome feedback.
+- **Farmer app** (`/chat`, `/chat/[id]`, `/profile`) — a mobile-friendly chat for any plant, with an icon-led plant picker, photo upload, a short structured assessment card, language switch, and outcome feedback.
 - **Admin workspace** (`/admin/dashboard`, `/admin/guidance`, `/admin/review/[conversationId]`) — usage metrics, AI telemetry, a review queue for uncertain assessments, and a guidance library with explicit provenance.
 - **AI pipeline** — Gemini multimodal call → Zod validation with one repair attempt → multilingual safety audit → no-evidence policy → persisted assessment.
 - **Evaluation harness** (`evaluation/`) — 38 synthetic cases (text + image) and a replay/record runner that produces reproducible JSON results.
@@ -80,7 +80,7 @@ Open <http://localhost:3000>. `/` redirects by session role.
 ## Engineering and operations
 
 These are the engineering controls around the product, not features. Local
-verification on 2026-11-07: **117 unit tests**, **7 Playwright journeys** against
+verification on 2026-11-07: **118 unit tests**, **7 Playwright journeys** against
 local PostgreSQL, TypeScript, ESLint, and a production build all pass. The
 GitHub Actions workflow itself has not yet run on a hosted runner.
 
@@ -141,15 +141,18 @@ GitHub Actions workflow itself has not yet run on a hosted runner.
 
 | Route | Schedule | Purpose |
 | --- | --- | --- |
-| `/api/cron/retry-assessments` | every 5 minutes | Retry queued assessments |
-| `/api/cron/health` | every 10 minutes | Evaluate thresholds and deliver alerts |
-| `/api/cron/retention` | daily at 03:00 | Enforce retention |
+| `/api/cron/retry-assessments` | daily at 02:00 UTC | Retry queued assessments (10 per run) |
+| `/api/cron/retention` | daily at 03:00 UTC | Enforce retention |
+| `/api/cron/health` | daily at 04:00 UTC | Evaluate thresholds and deliver alerts |
 
 All three require `Authorization: Bearer $CRON_SECRET`; without the secret they
 return 503 rather than exposing destructive work. Vercel sends that header when
-`CRON_SECRET` is set on the project. Vercel's Hobby plan limits cron frequency,
-so the 5- and 10-minute schedules require a plan that supports them; otherwise
-the workers can be triggered by any external scheduler.
+`CRON_SECRET` is set on the project. These are daily schedules because Vercel's
+Hobby plan rejects any cron expression that runs more than once per day; Hobby
+also fires a job anywhere within its scheduled hour, in UTC. With one retry run
+per day, a queued assessment waits at most until the next 02:00 UTC run. On a
+plan that supports it, or with any external scheduler, the same protected routes
+can be invoked more often without code changes.
 
 ## Architecture
 
@@ -255,7 +258,7 @@ The script accepts a single email, changes only an existing farmer account, and 
 
 Published guidance lives in `content/guidance/` (currently `uc-ipm-tomato.json`, five articles sourced from the University of California IPM tomato pest-management program). Each row records publisher, title, URL, access date, licence, and provenance. The admin guidance screen moves articles through `draft → in_review → published`. A publication gate (`lib/guidance.ts`) blocks publication unless provenance, source metadata, and review fields are present, and keeps `source_backed` distinct from `expert_reviewed`. No article is currently `expert_reviewed`.
 
-Retrieval is crop-scoped: an assessment receives only guidance matching the conversation's crop.
+Retrieval is plant-scoped: an assessment receives only guidance matching the selected plant, and an unspecified plant receives no curated reference block rather than tomato advice. The farmer view no longer renders source links; provenance stays available to admins.
 
 ## Privacy and retention
 
@@ -282,9 +285,9 @@ Email verification is temporarily disabled: new accounts can sign up and sign in
 ## Limitations
 
 - **No agricultural expert or validated dataset.** Assessments are preliminary and unverified; use them only as decision support.
-- **Tomato only.** Other crops are intentionally unsupported until validated.
+- **Any plant input, tomato-only curated guidance.** The assistant accepts any plant and reasons from the description and photo. Curated reference material currently exists only for tomato, and is injected only when the selected plant is tomato; other plants receive general safe guidance without crop-specific references.
 - **Synthetic evaluation.** Tests measure technical behaviour and safety rules, not diagnostic accuracy.
-- **Citations are source-backed, not expert-reviewed.** Each assessment lists the guidance it used, with a real URL and provenance. No article has been expert-reviewed yet.
+- **Guidance is source-backed, not expert-reviewed.** References and provenance remain in the admin workspace; source links are intentionally not shown in the farmer view. No article has been expert-reviewed yet.
 - **Guided intake is suggestion-based.** Common-sign chips help a farmer start; they are not a validated clinical questionnaire.
 - **Follow-up reminders are time-based and in-app only.** A configurable window (default 48h) triggers a prompt; there is no SMS, email, or push delivery.
 - **Mobile performance is measured on desktop/dev.** Images use `next/image`, and Lighthouse accessibility/best-practices/SEO are 1.0, but low-end device and throttled-network profiling is not possible with the current tooling.

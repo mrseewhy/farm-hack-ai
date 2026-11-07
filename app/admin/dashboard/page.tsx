@@ -390,7 +390,7 @@ export default async function AdminDashboard() {
           <CardContent>
             <div className="rounded-xl bg-primary/5 p-5">
               <BookOpen className="mb-4 size-6 text-primary" />
-              <p className="font-medium">Start with tomato guidance</p>
+              <p className="font-medium">Add plant guidance</p>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">
                 Document signs, follow-up questions, safe actions, and reviewer notes.
               </p>

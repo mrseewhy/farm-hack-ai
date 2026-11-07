@@ -47,6 +47,7 @@ import {
   CONSENT_HEADER,
   isAcceptedConsentVersion,
 } from "../lib/consent.ts";
+import { createConversationSchema } from "../lib/data/validation/chat.ts";
 
 test("cost: estimates per-million input and output rates in micro-USD", () => {
   const cost = estimateCostMicroUsd(1_000_000, 1_000_000, {
@@ -259,6 +260,14 @@ test("headers: development keeps eval and skips HSTS", () => {
   assert.match(contentSecurityPolicy(true), /unsafe-eval/);
   const keys = securityHeaders(true).map((header) => header.key);
   assert.ok(!keys.includes("Strict-Transport-Security"));
+});
+
+test("conversations: any plant name is accepted, empty is rejected", () => {
+  assert.equal(createConversationSchema.parse({}).crop, "plant");
+  for (const crop of ["tomato", "maize", "mango tree", "beans"]) {
+    assert.equal(createConversationSchema.parse({ crop }).crop, crop);
+  }
+  assert.throws(() => createConversationSchema.parse({ crop: "   " }));
 });
 
 test("consent: only the current policy version is accepted", () => {

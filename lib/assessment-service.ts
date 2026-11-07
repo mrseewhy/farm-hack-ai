@@ -265,7 +265,7 @@ export async function executeAssessment(
   }
 
   const conversation = await db
-    .select({ userId: conversations.userId })
+    .select({ userId: conversations.userId, crop: conversations.crop })
     .from(conversations)
     .where(eq(conversations.id, input.conversationId))
     .limit(1);
@@ -335,28 +335,36 @@ export async function executeAssessment(
     content: turn.content,
   }));
 
-  const guidanceArticles = await db
-    .select({
-      problem: knowledgeArticles.problem,
-      signs: knowledgeArticles.signs,
-      distinguishingQuestions: knowledgeArticles.distinguishingQuestions,
-      approvedActions: knowledgeArticles.approvedActions,
-      provenance: knowledgeArticles.provenance,
-      reviewer: knowledgeArticles.reviewer,
-      reviewedAt: knowledgeArticles.reviewedAt,
-      sourcePublisher: knowledgeArticles.sourcePublisher,
-      sourceTitle: knowledgeArticles.sourceTitle,
-      sourceUrl: knowledgeArticles.sourceUrl,
-      sourceAccessedAt: knowledgeArticles.sourceAccessedAt,
-      sourceLicense: knowledgeArticles.sourceLicense,
-    })
-    .from(knowledgeArticles)
-    .where(
-      and(
-        eq(knowledgeArticles.status, "published"),
-        eq(knowledgeArticles.crop, "tomato")
-      )
-    );
+  const plant = conversation[0].crop;
+
+  // Retrieval is scoped to the exact plant. Curated guidance currently exists
+  // only for tomato, so an unspecified or other plant gets no reference block
+  // rather than tomato advice applied to the wrong crop.
+  const guidanceArticles =
+    plant === "plant"
+      ? []
+      : await db
+          .select({
+            problem: knowledgeArticles.problem,
+            signs: knowledgeArticles.signs,
+            distinguishingQuestions: knowledgeArticles.distinguishingQuestions,
+            approvedActions: knowledgeArticles.approvedActions,
+            provenance: knowledgeArticles.provenance,
+            reviewer: knowledgeArticles.reviewer,
+            reviewedAt: knowledgeArticles.reviewedAt,
+            sourcePublisher: knowledgeArticles.sourcePublisher,
+            sourceTitle: knowledgeArticles.sourceTitle,
+            sourceUrl: knowledgeArticles.sourceUrl,
+            sourceAccessedAt: knowledgeArticles.sourceAccessedAt,
+            sourceLicense: knowledgeArticles.sourceLicense,
+          })
+          .from(knowledgeArticles)
+          .where(
+            and(
+              eq(knowledgeArticles.status, "published"),
+              eq(knowledgeArticles.crop, plant)
+            )
+          );
 
   const guidanceContext = formatGuidanceContext(guidanceArticles);
   const guidanceCitations = buildGuidanceCitations(guidanceArticles);
@@ -367,6 +375,7 @@ export async function executeAssessment(
       symptoms,
       images,
       language: input.language,
+      plant,
       guidanceContext,
       guidanceCitations,
       history,

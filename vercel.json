@@ -2,15 +2,15 @@
   "crons": [
     {
       "path": "/api/cron/retry-assessments",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/health",
-      "schedule": "*/10 * * * *"
+      "schedule": "0 2 * * *"
     },
     {
       "path": "/api/cron/retention",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/health",
+      "schedule": "0 4 * * *"
     }
   ]
 }

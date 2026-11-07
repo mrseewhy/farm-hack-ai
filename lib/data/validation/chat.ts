@@ -11,7 +11,9 @@ import { z } from "zod";
  */
 export const createConversationSchema = z.object({
   title: z.string().min(1).max(200).default("New conversation"),
-  crop: z.enum(["tomato"]).default("tomato"),
+  // Any plant is supported. Values are stored lowercase for retrieval; "plant"
+  // means the farmer did not specify one.
+  crop: z.string().trim().min(1).max(60).default("plant"),
   language: z.enum(["English", "Yoruba", "Hausa", "Igbo"]).default("English"),
 });
 

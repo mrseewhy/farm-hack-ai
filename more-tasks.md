@@ -38,7 +38,7 @@
 - [x] **16. Record source metadata and licensing.** Each row records publisher, title, URL, access date, and licence.
 - [x] **17. Create a source-backed knowledge library.** Admin guidance workflow with `draft → in_review → published`; `lib/guidance.ts` gates publication and keeps `source_backed` distinct from `expert_reviewed`. All published rows are `source_backed`; none are `expert_reviewed`.
 - [x] **18. Implement relevant guidance retrieval.** Assessments receive only guidance matching the conversation's crop.
-- [x] **19. Add citations to farmer responses.** Assessments now carry a server-owned `citations` array built by `buildGuidanceCitations` from the exact guidance supplied to the model. The chat UI renders a "Sources" block with provenance (source-backed vs expert-reviewed), publisher, title, access date, and a real URL. Citations are never model-generated and are omitted on fallback outcomes. Unit tests in `scripts/guidance.test.mjs`.
+- [x] **19. Add references to farmer responses (later simplified).** Assessments still carry a server-owned `citations` array built by `buildGuidanceCitations` from the exact guidance supplied to the model; citations are never model-generated and are omitted on fallback outcomes. **Updated 2026-11-07:** at product direction, the farmer-facing "Sources" block and its external links were removed to reduce reading load. Provenance stays available to admins. Unit tests in `scripts/guidance.test.mjs`.
 - [x] **20. Add a no-evidence response policy.** `lib/safety.ts` `applyEvidencePolicy` + `safeFallbackAssessment`, with evaluation cases.
 
 **Phase end result:** Met.
@@ -115,7 +115,7 @@
 
 ## Scope and validation boundaries
 
-- Keep **tomatoes as the only supported crop** until validation is possible.
+- Accept **any plant** in chat, but keep curated guidance and evaluation tomato-scoped until other plants have reviewed guidance.
 - Do not claim clinical or agricultural diagnostic accuracy from synthetic tests or unverified image labels.
 - Do not call guidance **expert-reviewed** unless an appropriately qualified expert has actually reviewed it.
 - Do not present the product as a replacement for agricultural extension workers.
