@@ -11,6 +11,7 @@ export { uploadCropImage } from "./upload";
 export {
   getAdminOverview,
   getReviewQueue,
+  getAiTelemetrySummary,
   logAdminAuditEvent,
   getAdminConversation,
   getKnowledgeArticles,
@@ -23,3 +24,4 @@ export {
   recordFollowUp,
   getFollowUps,
 } from "./admin";
+export type { AiTelemetrySummary } from "./admin";

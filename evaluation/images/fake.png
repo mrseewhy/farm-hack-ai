@@ -1,0 +1,3 @@
+This file is named .png but does not contain PNG magic bytes. It exists so the
+evaluation harness can verify that the image signature check rejects a renamed
+non-image.

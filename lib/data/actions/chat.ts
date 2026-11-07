@@ -9,6 +9,7 @@ import {
   messages,
   messageImages,
   assessments,
+  aiEvents,
   knowledgeArticles,
 } from "@/lib/data/dal";
 import { eq, desc, and, inArray, ne } from "drizzle-orm";
@@ -22,9 +23,14 @@ import {
 } from "@/lib/data/validation";
 import {
   assessCropHealth,
+  MODEL_CANDIDATES,
+  MODEL_NAME,
   MAX_HISTORY_MESSAGES,
   type AssessmentResult,
 } from "@/lib/ai";
+import { buildAiEvent, logAiEvent, type AiEvent } from "@/lib/monitoring";
+import { formatGuidanceContext } from "@/lib/guidance";
+import { aiEventToRow } from "@/lib/data/ai-event-row";
 import { v2 as cloudinary } from "cloudinary";
 
 // Configure Cloudinary
@@ -253,6 +259,139 @@ export async function deleteConversation(conversationId: number) {
   return { success: true, conversationId };
 }
 
+/** Build the persisted assistant reply text from a structured assessment. */
+function buildAssistantContent(assessment: AssessmentResult): string {
+  const contentParts: string[] = [];
+  if (assessment.observedSigns.length > 0) {
+    contentParts.push(
+      "**Observed signs:**\n" +
+        assessment.observedSigns.map((s) => `- ${s}`).join("\n")
+    );
+  }
+  if (assessment.possibleCauses.length > 0) {
+    contentParts.push(
+      "\n**Possible causes:**\n" +
+        assessment.possibleCauses.map((c) => `- ${c}`).join("\n")
+    );
+  }
+  if (assessment.followUpQuestions.length > 0) {
+    contentParts.push(
+      "\n**Things to check:**\n" +
+        assessment.followUpQuestions.map((q) => `- ${q}`).join("\n")
+    );
+  }
+  if (assessment.immediateActions.length > 0) {
+    contentParts.push(
+      "\n**Suggested actions:**\n" +
+        assessment.immediateActions.map((a) => `- ${a}`).join("\n")
+    );
+  }
+  if (assessment.whenToSeekHelp) {
+    contentParts.push("\n**When to seek help:**\n" + assessment.whenToSeekHelp);
+  }
+  if (assessment.uncertainty.level !== "low") {
+    contentParts.push(
+      `\n**Uncertainty:** ${assessment.uncertainty.level} — ${assessment.uncertainty.reason}`
+    );
+  }
+  if (assessment.imageIssues && assessment.imageIssues.failed > 0) {
+    contentParts.push(
+      `\n**Photo notice:** ${assessment.imageIssues.failed} of ${assessment.imageIssues.total} attached photo(s) could not be examined. Please upload a clear photo again.`
+    );
+  }
+  return (
+    contentParts.join("\n") ||
+    "I couldn't generate an assessment. Please try again or describe your symptoms in more detail."
+  );
+}
+
+/** Drizzle/pg may wrap the original driver error in a `cause`. */
+function isUniqueViolation(error: unknown): boolean {
+  const candidate = error as { code?: string; cause?: { code?: string } };
+  return (
+    candidate?.code === "23505" || candidate?.cause?.code === "23505"
+  );
+}
+
+/**
+ * Persist one AI telemetry event and emit it as a structured log line.
+ *
+ * Monitoring must never break an assessment, so an insert failure is logged and
+ * swallowed: the farmer still gets their answer even if the metrics table is
+ * unavailable. The event carries no farmer text or model output.
+ */
+async function recordAiEvent(event: AiEvent, conversationId: number) {
+  logAiEvent(event);
+
+  try {
+    await db.insert(aiEvents).values(aiEventToRow(event, conversationId));
+  } catch (error) {
+    console.error("Failed to persist AI telemetry event:", error);
+  }
+}
+
+/**
+ * Return the assessment already stored for a message, with the assistant reply
+ * it produced. If the link is missing (older rows, or a crash between saving
+ * the assessment and the reply) the reply is created and linked once so a
+ * retry can always finish the job.
+ */
+async function resolveExistingAssessment(
+  conversationId: number,
+  messageId: number,
+  language: string
+) {
+  const [existing] = await db
+    .select({
+      id: assessments.id,
+      structuredResult: assessments.structuredResult,
+      assistantMessageId: assessments.assistantMessageId,
+    })
+    .from(assessments)
+    .where(eq(assessments.messageId, messageId))
+    .limit(1);
+
+  if (!existing) return null;
+
+  const assessment = JSON.parse(
+    existing.structuredResult
+  ) as AssessmentResult;
+  let assistantMessage: { id: number; content: string } | null = null;
+
+  if (existing.assistantMessageId != null) {
+    const [linked] = await db
+      .select({ id: messages.id, content: messages.content })
+      .from(messages)
+      .where(eq(messages.id, existing.assistantMessageId))
+      .limit(1);
+    if (linked) assistantMessage = linked;
+  }
+
+  if (!assistantMessage) {
+    const [created] = await db
+      .insert(messages)
+      .values({
+        conversationId,
+        role: "assistant",
+        content: buildAssistantContent(assessment),
+        language,
+        status: "sent",
+      })
+      .returning({ id: messages.id, content: messages.content });
+    assistantMessage = created;
+    await db
+      .update(assessments)
+      .set({ assistantMessageId: created.id })
+      .where(eq(assessments.id, existing.id));
+  }
+
+  return {
+    assessment,
+    assessmentId: existing.id,
+    assistantMessage,
+  };
+}
+
 /**
  * Run AI crop health assessment for a user message and save the result.
  * Only the conversation owner can trigger an assessment.
@@ -299,36 +438,12 @@ export async function runAssessment(input: {
 
   // Do not reassess a message that already has an assessment. This prevents
   // duplicate assistant replies and repeated model cost for the same message.
-  const existingAssessment = await db
-    .select({ id: assessments.id, structuredResult: assessments.structuredResult })
-    .from(assessments)
-    .where(eq(assessments.messageId, input.messageId))
-    .limit(1);
-
-  if (existingAssessment.length > 0) {
-    const existing = JSON.parse(
-      existingAssessment[0].structuredResult
-    ) as AssessmentResult;
-    const [assistantMessage] = await db
-      .select({ id: messages.id, content: messages.content })
-      .from(messages)
-      .where(
-        and(
-          eq(messages.conversationId, input.conversationId),
-          eq(messages.role, "assistant")
-        )
-      )
-      .orderBy(desc(messages.createdAt))
-      .limit(1);
-    return {
-      assessment: existing,
-      assessmentId: existingAssessment[0].id,
-      assistantMessage: {
-        id: assistantMessage?.id ?? -1,
-        content: assistantMessage?.content ?? "",
-      },
-    };
-  }
+  const existing = await resolveExistingAssessment(
+    input.conversationId,
+    input.messageId,
+    input.language
+  );
+  if (existing) return existing;
 
   // Use the stored message text as the symptom evidence, not caller input.
   const symptoms = message[0].content;
@@ -359,119 +474,129 @@ export async function runAssessment(input: {
     content: turn.content,
   }));
 
-  // Fetch expert-reviewed guidance for context
+  // Fetch curated guidance for context. Provenance travels with each article
+  // so the prompt can distinguish source-backed from expert-reviewed material
+  // and never overstate either.
   const guidanceArticles = await db
     .select({
       problem: knowledgeArticles.problem,
       signs: knowledgeArticles.signs,
       distinguishingQuestions: knowledgeArticles.distinguishingQuestions,
       approvedActions: knowledgeArticles.approvedActions,
+      provenance: knowledgeArticles.provenance,
+      reviewer: knowledgeArticles.reviewer,
+      reviewedAt: knowledgeArticles.reviewedAt,
+      sourcePublisher: knowledgeArticles.sourcePublisher,
+      sourceTitle: knowledgeArticles.sourceTitle,
+      sourceUrl: knowledgeArticles.sourceUrl,
+      sourceAccessedAt: knowledgeArticles.sourceAccessedAt,
+      sourceLicense: knowledgeArticles.sourceLicense,
     })
     .from(knowledgeArticles)
     .where(eq(knowledgeArticles.status, "published"));
 
-  let guidanceContext = "";
-  if (guidanceArticles.length > 0) {
-    guidanceContext = "\nEXPERT-REVIEWED TOMATO GUIDANCE:\n";
-    for (const article of guidanceArticles) {
-      guidanceContext += `
-Problem: ${article.problem}
-Signs: ${article.signs}
-Distinguishing questions: ${article.distinguishingQuestions}
-Approved actions: ${article.approvedActions}
----`;
-    }
-    guidanceContext += "\nUse this guidance to inform your assessment. Reference approved actions when symptoms match known problems.";
-  }
+  const guidanceContext = formatGuidanceContext(guidanceArticles);
 
-  const { assessment, model: assessmentModel } = await assessCropHealth({
-    symptoms,
-    images,
-    language: input.language,
-    guidanceContext,
-    history,
-  });
-
-  // Save the assessment. The unique index on assessments.message_id makes this
-  // atomic: a concurrent duplicate submission is rejected instead of creating
-  // a second assessment and a second assistant reply.
-  let assessmentId: number;
+  let aiResult: Awaited<ReturnType<typeof assessCropHealth>>;
   try {
-    const [record] = await db
-      .insert(assessments)
-      .values({
-        conversationId: input.conversationId,
-        messageId: input.messageId,
-        structuredResult: JSON.stringify(assessment),
-        // Record the model that actually produced this result, which may be a
-        // fallback when the primary model was unavailable.
-        model: assessmentModel,
-      })
-      .returning({ id: assessments.id });
-    assessmentId = record.id;
-  } catch (insertError) {
-    if ((insertError as { code?: string }).code === "23505") {
-      const [existing] = await db
-        .select({
-          id: assessments.id,
-          structuredResult: assessments.structuredResult,
-        })
-        .from(assessments)
-        .where(eq(assessments.messageId, input.messageId))
-        .limit(1);
-
-      if (existing) {
-        return {
-          assessment: JSON.parse(
-            existing.structuredResult
-          ) as AssessmentResult,
-          assessmentId: existing.id,
-          assistantMessage: { id: -1, content: "" },
-        };
-      }
-    }
-    throw insertError;
+    aiResult = await assessCropHealth({
+      symptoms,
+      images,
+      language: input.language,
+      guidanceContext,
+      history,
+    });
+  } catch (error) {
+    // Every configured model failed. Record the failure before rethrowing so
+    // provider outages show up in monitoring, not only in request logs.
+    await recordAiEvent(
+      buildAiEvent({
+        eventType: "assessment",
+        modelRequested: MODEL_NAME,
+        modelUsed: null,
+        // If the real responder threw, every configured candidate was tried.
+        fallbackAttempts: MODEL_CANDIDATES.length,
+        fallbackUsed: MODEL_CANDIDATES.length > 1,
+        validationOutcome: "invalid",
+        outcome: "error",
+      }),
+      input.conversationId
+    );
+    throw error;
   }
+
+  const { assessment, model: assessmentModel, telemetry } = aiResult;
 
   // Build the assistant reply content server-side from the assessment.
   // The content is derived from the model output, never from caller input,
   // so a farmer cannot forge an assistant reply through a separate call.
-  const contentParts: string[] = [];
-  if (assessment.observedSigns.length > 0) {
-    contentParts.push("**Observed signs:**\n" + assessment.observedSigns.map((s) => `- ${s}`).join("\n"));
-  }
-  if (assessment.possibleCauses.length > 0) {
-    contentParts.push("\n**Possible causes:**\n" + assessment.possibleCauses.map((c) => `- ${c}`).join("\n"));
-  }
-  if (assessment.followUpQuestions.length > 0) {
-    contentParts.push("\n**Things to check:**\n" + assessment.followUpQuestions.map((q) => `- ${q}`).join("\n"));
-  }
-  if (assessment.immediateActions.length > 0) {
-    contentParts.push("\n**Suggested actions:**\n" + assessment.immediateActions.map((a) => `- ${a}`).join("\n"));
-  }
-  if (assessment.whenToSeekHelp) {
-    contentParts.push("\n**When to seek help:**\n" + assessment.whenToSeekHelp);
-  }
-  if (assessment.uncertainty.level !== "low") {
-    contentParts.push(`\n**Uncertainty:** ${assessment.uncertainty.level} — ${assessment.uncertainty.reason}`);
-  }
-  const assistantContent =
-    contentParts.join("\n") ||
-    "I couldn't generate an assessment. Please try again or describe your symptoms in more detail.";
+  const assistantContent = buildAssistantContent(assessment);
 
-  // Create the assistant message server-side. The role is fixed to "assistant".
-  const [assistantMessage] = await db
-    .insert(messages)
-    .values({
-      conversationId: input.conversationId,
-      role: "assistant",
-      content: assistantContent,
-      language: input.language,
-      status: "sent",
-    })
-    .returning();
+  // Save the assessment and its assistant reply in one transaction, then
+  // record the explicit link. The unique index on assessments.message_id makes
+  // this atomic: a concurrent duplicate submission is rejected instead of
+  // creating a second assessment and a second assistant reply.
+  let saved: {
+    assessmentId: number;
+    assistantMessage: { id: number; content: string };
+  };
+  try {
+    saved = await db.transaction(async (tx) => {
+      const [record] = await tx
+        .insert(assessments)
+        .values({
+          conversationId: input.conversationId,
+          messageId: input.messageId,
+          structuredResult: JSON.stringify(assessment),
+          // Record the model that actually produced this result, which may be a
+          // fallback when the primary model was unavailable.
+          model: assessmentModel,
+        })
+        .returning({ id: assessments.id });
 
-  return { assessment, assessmentId, assistantMessage };
+      const [assistantMessage] = await tx
+        .insert(messages)
+        .values({
+          conversationId: input.conversationId,
+          role: "assistant",
+          content: assistantContent,
+          language: input.language,
+          status: "sent",
+        })
+        .returning({ id: messages.id, content: messages.content });
+
+      await tx
+        .update(assessments)
+        .set({ assistantMessageId: assistantMessage.id })
+        .where(eq(assessments.id, record.id));
+
+      return {
+        assessmentId: record.id,
+        assistantMessage,
+      };
+    });
+  } catch (insertError) {
+    // A concurrent request won the race and already stored this assessment.
+    if (isUniqueViolation(insertError)) {
+      const concurrent = await resolveExistingAssessment(
+        input.conversationId,
+        input.messageId,
+        input.language
+      );
+      if (concurrent) return concurrent;
+    }
+    throw insertError;
+  }
+
+  // Record telemetry after the assessment is safely persisted and outside the
+  // transaction's error handling. It is best-effort and self-contained, so a
+  // monitoring problem can never affect the farmer's request.
+  await recordAiEvent(
+    buildAiEvent({ ...telemetry, occurredAt: new Date().toISOString() }),
+    input.conversationId
+  );
+
+  return { assessment, ...saved };
 }
 
 /**

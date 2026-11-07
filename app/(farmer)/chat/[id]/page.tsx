@@ -32,13 +32,19 @@ export default async function SavedChatPage({
   // Parse every stored assessment for this conversation so structured results
   // for all turns are restored on reload, not just the latest one.
   const assessmentRecords = conversation.assessments ?? [];
-  const parsedAssessments = new Map<number, Message["assessment"]>();
+  // Preferred lookup: the assistant reply the assessment explicitly produced.
+  const byAssistantMessageId = new Map<number, Message["assessment"]>();
+  // Legacy fallback for rows saved before the link existed.
+  const byUserMessageId = new Map<number, Message["assessment"]>();
   for (const record of assessmentRecords) {
     try {
-      parsedAssessments.set(
-        record.messageId,
-        JSON.parse(record.structuredResult) as Message["assessment"]
-      );
+      const parsed = JSON.parse(
+        record.structuredResult
+      ) as Message["assessment"];
+      if (record.assistantMessageId != null) {
+        byAssistantMessageId.set(record.assistantMessageId, parsed);
+      }
+      byUserMessageId.set(record.messageId, parsed);
     } catch {
       // Skip malformed records.
     }
@@ -52,15 +58,19 @@ export default async function SavedChatPage({
       role: m.role as "user" | "assistant",
     } as Message;
     messages.push(message);
-    // Attach each saved assessment to the assistant reply that answered the
-    // assessed user message (identified by assessment.messageId). This keeps
-    // the structured sections aligned with the correct reply in longer chats.
-    if (
-      message.role === "assistant" &&
-      index > 0 &&
-      parsedAssessments.has(rawMessages[index - 1]?.id)
-    ) {
-      message.assessment = parsedAssessments.get(rawMessages[index - 1]!.id)!;
+    if (message.role !== "assistant") return;
+
+    // Attach the assessment that points directly at this reply. Older rows
+    // fall back to the previous-message heuristic so existing data still
+    // renders after the migration.
+    const linked = byAssistantMessageId.get(message.id);
+    if (linked) {
+      message.assessment = linked;
+      return;
+    }
+    const previous = rawMessages[index - 1];
+    if (previous && byUserMessageId.has(previous.id)) {
+      message.assessment = byUserMessageId.get(previous.id)!;
     }
   });
 

@@ -1,0 +1,147 @@
+{
+  "$schema": "Internal FarmHack AI guidance collection. Not a public standard.",
+  "collection": "UC IPM Pest Management Guidelines: Tomato",
+  "publisher": "University of California Statewide Integrated Pest Management Program",
+  "publication": "UC ANR Publication 3470",
+  "homepage": "https://ipm.ucanr.edu/agriculture/tomato/",
+  "license": "Text (c) Regents of the University of California. Educational, noncommercial use permitted with credit to UC IPM; commercial distribution requires permission; images require written permission.",
+  "licenseUrl": "https://ipm.ucanr.edu/GENERAL/copyright.html",
+  "accessedAt": "2026-11-07",
+  "provenance": "source_backed",
+  "reviewNote": "These are paraphrased summaries of publicly available UC IPM guidelines. They have NOT been reviewed by an agricultural expert. No pesticide active ingredients, doses, or chemical treatments are reproduced; chemical decisions are deliberately deferred to a local extension worker.",
+  "articles": [
+    {
+      "crop": "tomato",
+      "problem": "Early blight (Alternaria solani)",
+      "version": "1.0",
+      "signs": [
+        "Small dark brown or black spots, about 6-12 mm across, on leaves, stems, and fruit.",
+        "Leaf spots look leathery and often show concentric rings; they usually appear on older, lower leaves first.",
+        "Fruit spots are sunken and dry, sometimes with a concentric pattern, often near the stem end."
+      ],
+      "distinguishingQuestions": [
+        "Do the spots have a target-like pattern of concentric rings?",
+        "Did the symptoms start on the older, lower leaves?",
+        "Has the crop been through several days of cool, humid, or rainy weather?"
+      ],
+      "approvedActions": [
+        "Remove and destroy volunteer tomato and potato plants and nightshade weeds, which can carry the fungus between seasons.",
+        "Rotate away from tomatoes and potatoes so infected plant debris can break down.",
+        "Improve airflow around plants and avoid working among wet leaves, to limit spread.",
+        "Early blight is uncommon in dry, hot conditions and treatment is rarely needed; if it is spreading, consult a local agricultural extension worker before using any product."
+      ],
+      "sourcePublisher": "University of California Statewide IPM Program",
+      "sourceTitle": "Early Blight - UC IPM Pest Management Guidelines: Tomato (UC ANR Publication 3470)",
+      "sourceUrl": "https://ipm.ucanr.edu/agriculture/tomato/early-blight/",
+      "sourceLicense": "(c) Regents of the University of California; educational, noncommercial use with attribution",
+      "sourceAccessedAt": "2026-11-07"
+    },
+    {
+      "crop": "tomato",
+      "problem": "Late blight (Phytophthora infestans)",
+      "version": "1.0",
+      "signs": [
+        "Water-soaked patches on leaves that enlarge quickly into purple-brown, oily-looking blotches.",
+        "A ring of greyish-white mould may be visible on the underside of leaves around the blotches.",
+        "Leaves die and infection spreads rapidly to stems and fruit; fruit turn brown but usually stay firm."
+      ],
+      "distinguishingQuestions": [
+        "Did the patches appear suddenly and spread very fast?",
+        "Has the weather been cool and very humid, or has there been rain or overhead irrigation?",
+        "Is there greyish-white mould on the underside of the leaves?"
+      ],
+      "approvedActions": [
+        "Remove and destroy volunteer tomato and potato plants and nightshade weeds.",
+        "Check that transplants are free of disease before planting.",
+        "Avoid overhead sprinkler irrigation where possible, because it favours the disease.",
+        "Late blight can spread very fast and cause severe losses; contact a local agricultural extension worker immediately if you suspect it."
+      ],
+      "sourcePublisher": "University of California Statewide IPM Program",
+      "sourceTitle": "Late Blight - UC IPM Pest Management Guidelines: Tomato (UC ANR Publication 3470)",
+      "sourceUrl": "https://ipm.ucanr.edu/agriculture/tomato/late-blight/",
+      "sourceLicense": "(c) Regents of the University of California; educational, noncommercial use with attribution",
+      "sourceAccessedAt": "2026-11-07"
+    },
+    {
+      "crop": "tomato",
+      "problem": "Fusarium wilt (Fusarium oxysporum f. sp. lycopersici)",
+      "version": "1.0",
+      "signs": [
+        "Yellowing and wilting of individual branches, sometimes on only one side of the plant (a 'yellow flag' effect).",
+        "Infected plants usually die; a dark brown discolouration inside the stem extends well up from the roots.",
+        "Symptoms often first appear around the time fruit is sizing."
+      ],
+      "distinguishingQuestions": [
+        "Is the yellowing and wilting on one side or one branch rather than the whole plant evenly?",
+        "If you cut the stem, is the inside discoloured dark brown?",
+        "Did the symptoms begin around the time the fruit was sizing?"
+      ],
+      "approvedActions": [
+        "Grow tomato varieties with resistance to Fusarium wilt where they are available.",
+        "Clean soil from tools and machinery between fields to limit the spread of infested soil.",
+        "Rotate out of tomatoes for several years to reduce the fungus in the soil.",
+        "Avoid conditions that encourage root-knot nematodes, which can overcome varietal resistance.",
+        "Fusarium and Verticillium wilts look similar; confirming between them needs laboratory testing, so consult a local agricultural extension worker."
+      ],
+      "sourcePublisher": "University of California Statewide IPM Program",
+      "sourceTitle": "Fusarium Wilt - UC IPM Pest Management Guidelines: Tomato (UC ANR Publication 3470)",
+      "sourceUrl": "https://ipm.ucanr.edu/agriculture/tomato/fusarium-wilt/",
+      "sourceLicense": "(c) Regents of the University of California; educational, noncommercial use with attribution",
+      "sourceAccessedAt": "2026-11-07"
+    },
+    {
+      "crop": "tomato",
+      "problem": "Whiteflies (Bemisia tabaci and Trialeurodes species)",
+      "version": "1.0",
+      "signs": [
+        "Tiny (about 1.5 mm) yellowish insects with white wings, mostly on the undersides of leaves; they fly up when the plant is disturbed.",
+        "Leaves may yellow and curl; a sticky honeydew can make leaves look shiny or blackened by sooty mould.",
+        "Feeding by sweetpotato whitefly can cause fruit to ripen unevenly."
+      ],
+      "distinguishingQuestions": [
+        "Do small white insects fly up when you brush against the plant?",
+        "Are the undersides of the leaves sticky or coated in a black sooty film?",
+        "Have nearby crops such as melons, cotton, or cole crops recently been harvested or declined?"
+      ],
+      "approvedActions": [
+        "Keep the area around the crop free of weeds and remove crop residues; whiteflies move in from nearby host crops.",
+        "Separate and stagger plantings away from other whitefly host crops where possible.",
+        "Conserve natural enemies such as parasitic wasps, lacewings, and lady beetles.",
+        "Check field edges first, because whiteflies usually build up there; only treat when numbers are high, and consult a local agricultural extension worker about any product.",
+        "Whiteflies can transmit tomato yellow leaf curl virus, so controlling them also reduces that risk."
+      ],
+      "sourcePublisher": "University of California Statewide IPM Program",
+      "sourceTitle": "Whiteflies - UC IPM Pest Management Guidelines: Tomato (UC ANR Publication 3470)",
+      "sourceUrl": "https://ipm.ucanr.edu/agriculture/tomato/whiteflies/",
+      "sourceLicense": "(c) Regents of the University of California; educational, noncommercial use with attribution",
+      "sourceAccessedAt": "2026-11-07"
+    },
+    {
+      "crop": "tomato",
+      "problem": "Tomato yellow leaf curl (Tomato yellow leaf curl virus, TYLCV)",
+      "version": "1.0",
+      "signs": [
+        "Stunted, upright plant growth; plants infected early are severely stunted.",
+        "Leaves are small and curl upward, with strong crumpling and yellowing between the veins and at the margins.",
+        "Shortened internodes give the plant a bushy, 'bonsai'-like appearance; flowers often drop and fruit production falls sharply."
+      ],
+      "distinguishingQuestions": [
+        "Are the leaves small and curled upward, with yellowing between the veins?",
+        "Is the plant stunted and bushy with very short spaces between leaves?",
+        "Are flowers dropping without setting fruit?"
+      ],
+      "approvedActions": [
+        "Select tomato varieties with resistance to tomato yellow leaf curl virus where available.",
+        "Use virus-free and whitefly-free transplants, and do not move transplants in from areas known to have the virus.",
+        "Manage whiteflies, which spread the virus, and consider fine-mesh row covers to protect young plants.",
+        "Remove and destroy infected plants when only a few are affected, and manage weeds around the field.",
+        "Remove and destroy old crop residue and volunteer plants after harvest to reduce the virus between seasons."
+      ],
+      "sourcePublisher": "University of California Statewide IPM Program",
+      "sourceTitle": "Tomato Yellow Leaf Curl - UC IPM Pest Management Guidelines: Tomato (UC ANR Publication 3470)",
+      "sourceUrl": "https://ipm.ucanr.edu/agriculture/tomato/tomato-yellow-leaf-curl/",
+      "sourceLicense": "(c) Regents of the University of California; educational, noncommercial use with attribution",
+      "sourceAccessedAt": "2026-11-07"
+    }
+  ]
+}

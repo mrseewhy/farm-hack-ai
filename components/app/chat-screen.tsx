@@ -49,6 +49,10 @@ export type Message = {
       level: "low" | "medium" | "high";
       reason: string;
     };
+    imageIssues?: {
+      total: number;
+      failed: number;
+    };
   };
 };
 
@@ -595,6 +599,9 @@ export function ChatScreen({
                     <li>{t("tipGoodLighting", language)}</li>
                   </ul>
                 </div>
+                <p className="mx-auto mt-8 max-w-md text-xs leading-5 text-muted-foreground">
+                  {t("limitationsNotice", language)}
+                </p>
               </div>
             ) : (
               <div className="space-y-6" aria-live="polite">
@@ -633,6 +640,15 @@ export function ChatScreen({
                         message.content}
                       {message.role === "assistant" && message.assessment && (
                         <div className="mt-3 pt-3 border-t border-border/50">
+                          {message.assessment.imageIssues &&
+                            message.assessment.imageIssues.failed > 0 && (
+                              <div
+                                role="status"
+                                className="mb-2 rounded-md bg-destructive/10 px-2 py-1.5 text-xs text-destructive"
+                              >
+                                {t("imageNotExamined", language)}
+                              </div>
+                            )}
                           {message.assessment.observedSigns.length > 0 && (
                             <div className="mb-2">
                               <p className="text-xs font-semibold text-primary mb-1">{t("observedSigns", language)}</p>
@@ -687,6 +703,9 @@ export function ChatScreen({
                               </p>
                             </div>
                           )}
+                          <p className="mt-2 text-[11px] leading-4 text-muted-foreground/80">
+                            {t("limitationsNotice", language)}
+                          </p>
                           {feedbackSubmitted !== message.id &&
                             (feedbackStage?.messageId === message.id ? (
                               <div className="mt-3 pt-3 border-t border-border/50">

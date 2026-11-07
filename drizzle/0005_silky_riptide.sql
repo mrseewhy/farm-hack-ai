@@ -1,0 +1,3 @@
+ALTER TABLE "assessments" ADD COLUMN "assistant_message_id" integer;--> statement-breakpoint
+ALTER TABLE "assessments" ADD CONSTRAINT "assessments_assistant_message_id_messages_id_fk" FOREIGN KEY ("assistant_message_id") REFERENCES "public"."messages"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "assessments_assistant_message_id_idx" ON "assessments" USING btree ("assistant_message_id");

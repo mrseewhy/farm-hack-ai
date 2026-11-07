@@ -1,0 +1,49 @@
+{
+  "note": "Image assets for evaluation cases. Each entry records provenance so any result can be traced back to a permitted, licensed asset. Assets with a null file are declared but not yet collected; the runner skips cases that need them and reports the gap.",
+  "assets": [
+    {
+      "id": "tomato-clear-01",
+      "file": null,
+      "mime": "image/jpeg",
+      "source": "TO BE COLLECTED - needs a permitted, licensed photo",
+      "url": null,
+      "license": null,
+      "accessedAt": null,
+      "description": "Clear, well-lit close-up of a tomato leaf with dark spots.",
+      "expectedNote": "What the photo shows must be verifiable; do not label it as a confirmed diagnosis."
+    },
+    {
+      "id": "corrupt-octet",
+      "file": "images/not-an-image.bin",
+      "mime": "application/octet-stream",
+      "source": "synthetic (created for this harness)",
+      "url": null,
+      "license": "n/a (synthetic fixture)",
+      "accessedAt": "2026-11-06",
+      "description": "A non-image payload served with an octet-stream content type.",
+      "expectedNote": "Must be rejected before reaching the model; the farmer must see a failed-photo notice."
+    },
+    {
+      "id": "fake-png-signature",
+      "file": "images/fake.png",
+      "mime": "image/png",
+      "source": "synthetic (created for this harness)",
+      "url": null,
+      "license": "n/a (synthetic fixture)",
+      "accessedAt": "2026-11-06",
+      "description": "A text file renamed with a .png extension and an image/png content type.",
+      "expectedNote": "Must be rejected by the image signature check despite the MIME type."
+    },
+    {
+      "id": "tiny-real-png",
+      "file": "images/tiny-real.png",
+      "mime": "image/png",
+      "source": "synthetic (standard 1x1 PNG fixture)",
+      "url": null,
+      "license": "n/a (synthetic fixture)",
+      "accessedAt": "2026-11-06",
+      "description": "A valid but 68-byte 1x1 PNG, below the minimum analyzable size.",
+      "expectedNote": "Must be rejected as too small to analyze."
+    }
+  ]
+}

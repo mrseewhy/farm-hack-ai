@@ -10,6 +10,7 @@ import {
   Sprout,
   Users,
   AlertTriangle,
+  Activity,
 } from "lucide-react";
 import { AdminShell } from "@/components/app/admin-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +19,8 @@ import { cn } from "@/lib/utils";
 import {
   getAdminOverview,
   getReviewQueue,
+  getAiTelemetrySummary,
+  type AiTelemetrySummary,
 } from "@/lib/data/actions";
 
 const metrics = [
@@ -48,10 +51,12 @@ export default async function AdminDashboard() {
   // Use Promise.allSettled so a database outage does not silently render as
   // false zeros (which would look like an unused app). Errors are surfaced
   // instead of being swallowed into empty data.
-  const [overviewResult, reviewQueueResult] = await Promise.allSettled([
-    getAdminOverview(),
-    getReviewQueue(),
-  ]);
+  const [overviewResult, reviewQueueResult, aiTelemetryResult] =
+    await Promise.allSettled([
+      getAdminOverview(),
+      getReviewQueue(),
+      getAiTelemetrySummary(),
+    ]);
 
   let overview = { farmers: 0, conversations: 0, cropReports: 0, needsReview: 0 };
   let overviewError: string | null = null;
@@ -78,6 +83,30 @@ export default async function AdminDashboard() {
   }
 
   const dashboardError = overviewError ?? reviewQueueError;
+
+  let aiTelemetry: AiTelemetrySummary = {
+    windowHours: 24,
+    total: 0,
+    ok: 0,
+    filtered: 0,
+    fallback: 0,
+    error: 0,
+    degradedRate: 0,
+    avgLatencyMs: 0,
+    safetyFlagTotal: 0,
+    imageFailureTotal: 0,
+    recentIssues: [],
+  };
+  let aiTelemetryError: string | null = null;
+  if (aiTelemetryResult.status === "fulfilled") {
+    aiTelemetry = aiTelemetryResult.value;
+  } else {
+    aiTelemetryError =
+      aiTelemetryResult.reason instanceof Error
+        ? aiTelemetryResult.reason.message
+        : "Failed to load AI pipeline health.";
+    console.error("AI telemetry failed:", aiTelemetryResult.reason);
+  }
 
   return (
     <AdminShell
@@ -131,6 +160,105 @@ export default async function AdminDashboard() {
             </Card>
           );
         })}
+      </div>
+
+      {/* AI pipeline health. Reads metadata-only telemetry: no farmer text or
+          model output is stored or shown here. */}
+      <div className="mt-7">
+        <Card className="border-border/70 shadow-none">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+            <div className="flex items-center gap-2">
+              <Activity className="size-5 text-primary" aria-hidden="true" />
+              <CardTitle className="text-lg">AI pipeline health</CardTitle>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Last {aiTelemetry.windowHours}h
+            </p>
+          </CardHeader>
+          <CardContent className="p-4">
+            {aiTelemetryError ? (
+              <p className="text-sm text-destructive">{aiTelemetryError}</p>
+            ) : aiTelemetry.total === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No AI assessments recorded in this window yet.
+              </p>
+            ) : (
+              <>
+                <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
+                  {[
+                    { label: "Assessments", value: aiTelemetry.total },
+                    { label: "Filtered", value: aiTelemetry.filtered },
+                    { label: "Fallbacks", value: aiTelemetry.fallback },
+                    { label: "Errors", value: aiTelemetry.error },
+                    {
+                      label: "Avg latency",
+                      value: `${aiTelemetry.avgLatencyMs} ms`,
+                    },
+                    {
+                      label: "Degraded",
+                      value: `${Math.round(aiTelemetry.degradedRate * 100)}%`,
+                    },
+                  ].map((stat) => (
+                    <div
+                      key={stat.label}
+                      className="rounded-lg border border-border/50 bg-muted/40 p-3"
+                    >
+                      <p className="text-xs text-muted-foreground">
+                        {stat.label}
+                      </p>
+                      <p className="mt-1 text-xl font-semibold">{stat.value}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  {aiTelemetry.safetyFlagTotal} safety flag(s) and{" "}
+                  {aiTelemetry.imageFailureTotal} failed photo(s) in this window.
+                </p>
+                {aiTelemetry.recentIssues.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    <p className="text-sm font-medium">Recent non-clean runs</p>
+                    {aiTelemetry.recentIssues.map((issue) => (
+                      <div
+                        key={issue.id}
+                        className="flex flex-wrap items-center gap-2 rounded-lg border border-border/50 p-2 text-xs"
+                      >
+                        <span
+                          className={cn(
+                            "rounded px-1.5 py-0.5 font-semibold",
+                            issue.outcome === "error"
+                              ? "bg-destructive/10 text-destructive"
+                              : "bg-muted text-muted-foreground"
+                          )}
+                        >
+                          {issue.outcome}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {issue.modelUsed ?? issue.modelRequested}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {issue.latencyMs} ms
+                        </span>
+                        {issue.safetyFlagCount > 0 && (
+                          <span className="text-muted-foreground">
+                            {issue.safetyFlagCount} flag(s)
+                          </span>
+                        )}
+                        {issue.imageFailed > 0 && (
+                          <span className="text-muted-foreground">
+                            {issue.imageFailed} photo(s) failed
+                          </span>
+                        )}
+                        <span className="ml-auto text-muted-foreground">
+                          {new Date(issue.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       <div className="mt-7 grid gap-5 lg:grid-cols-[1.5fr_1fr]">

@@ -5,6 +5,7 @@ export {
   messageImages,
   assessments,
   adminAuditEvents,
+  aiEvents,
   knowledgeArticles,
   knowledgeArticlesRelations,
   followUps,

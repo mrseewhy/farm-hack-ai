@@ -76,6 +76,8 @@ const translations: Record<Language, Record<string, string>> = {
     errorMaxImages: "Maximum 5 images per conversation reached.",
     errorLoadConversation: "Failed to load conversation. Please try again.",
     errorDeleteConversation: "Failed to delete conversation.",
+    imageNotExamined:
+      "One or more photos could not be examined. Please upload a clear photo again.",
 
     // Assessment fields
     observedSigns: "Observed signs",
@@ -119,6 +121,8 @@ const translations: Record<Language, Record<string, string>> = {
     tipWholePlant: "Whole plant — include stems and leaves",
     tipAffectedPart: "Affected part — close-up of the damaged area",
     tipGoodLighting: "Good lighting — natural light, no flash",
+    limitationsNotice:
+      "This is preliminary AI guidance, not a confirmed diagnosis. Confirm important decisions with a local agricultural extension worker.",
   },
 
   Yoruba: {
@@ -192,6 +196,8 @@ const translations: Record<Language, Record<string, string>> = {
     errorLoadConversation:
       "A kò lè gbé ìjíròrò wá. Jọ̀wọ́ gbìyànjú lẹ́ẹ̀kan sí i.",
     errorDeleteConversation: "A kò lè pa ìjíròrò rẹ́.",
+    imageNotExamined:
+      "A kò lè ṣàyẹ̀wò fọ́tò kan tàbí jù bẹ́ẹ̀ lọ. Jọ̀wọ́ tún fọ́tò tí ó ṣe kedere gbé wọlé.",
 
     // Assessment fields
     observedSigns: "Àwọn àmì tí a rí",
@@ -236,6 +242,8 @@ const translations: Record<Language, Record<string, string>> = {
     tipWholePlant: "Gbogbo ọ̀gbà — pẹ̀lú ẹ̀ka àti ewé",
     tipAffectedPart: "Apá tí ó kan — fọ́tò tímọ́tímọ́",
     tipGoodLighting: "Ìmọ́lẹ̀ tó dára — ìmọ́lẹ̀ àdánidá, má lo fíláṣì",
+    limitationsNotice:
+      "Èyí jẹ́ ìtọ́sọ́nà AI alakọbẹ̀rẹ̀, kì í ṣe ìdánilójú àrùn. Máa gbà àwọn ìpinnu pàtàkì ní ìmọ̀ràn lọ́wọ́ òṣìṣẹ́ ìtẹ̀numọ́síṣẹ́ àgbẹ̀.",
   },
 
   Hausa: {
@@ -307,6 +315,8 @@ const translations: Record<Language, Record<string, string>> = {
     errorMaxImages: "An kai iyakar hotuna 5 a kowace tattaunawa.",
     errorLoadConversation: "An kasa loda tattaunawa. Sake gwadawa.",
     errorDeleteConversation: "An kasa share tattaunawa.",
+    imageNotExamined:
+      "Ba a iya nazarin hoto ɗaya ko fiye ba. Don Allah sake loda hoto mai haske.",
 
     // Assessment fields
     observedSigns: "Alamun da aka gani",
@@ -352,6 +362,8 @@ const translations: Record<Language, Record<string, string>> = {
     tipWholePlant: "Dukan shuka — har da rassa da ganye",
     tipAffectedPart: "Sashin da ya shafa — hoto na kusa",
     tipGoodLighting: "Haske mai kyau — hasken rana, ba walƙiya",
+    limitationsNotice:
+      "Wannan jagora ce ta farko ta AI, ba tabbatacciyar ganewar asali ba. Tabbatar da muhimman shawarwari da ma'aikacin aikin gona na gida.",
   },
 
   Igbo: {
@@ -422,6 +434,8 @@ const translations: Record<Language, Record<string, string>> = {
     errorMaxImages: "Eruola foto 5 n'otu mkparịta ụka.",
     errorLoadConversation: "Enweghị ike ibudata mkparịta ụka. Nwaa ọzọ.",
     errorDeleteConversation: "Enweghị ike ihichapụ mkparịta ụka.",
+    imageNotExamined:
+      "Enweghị ike inyocha otu foto ma ọ bụ karịa. Biko bulite foto doro anya ọzọ.",
 
     // Assessment fields
     observedSigns: "Ihe ị na-ahụ",
@@ -466,6 +480,8 @@ const translations: Record<Language, Record<string, string>> = {
     tipWholePlant: "Osisi niile — gụnyere alaka na akwụkwọ",
     tipAffectedPart: "Akụkụ metụtara — foto dị nso",
     tipGoodLighting: "Ìhè dị mma — ìhè eke, ọ bụghị flash",
+    limitationsNotice:
+      "Nke a bụ nduzi AI mbido, ọ bụghị nchọpụta ọrịa doro anya. Kwenye mkpebi ndị dị mkpa na onye ọrụ ugbo mpaghara.",
   },
 };
 

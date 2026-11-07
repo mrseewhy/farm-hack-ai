@@ -34,8 +34,14 @@ type Article = {
   approvedActions: string;
   status: "draft" | "in_review" | "published";
   version: string;
+  provenance: "source_backed" | "expert_reviewed";
   reviewer: string | null;
   reviewedAt: Date | null;
+  sourcePublisher: string | null;
+  sourceTitle: string | null;
+  sourceUrl: string | null;
+  sourceAccessedAt: Date | null;
+  sourceLicense: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -45,6 +51,48 @@ const STATUS_CONFIG: Record<string, { label: string; variant: string }> = {
   in_review: { label: "In review", variant: "default" },
   published: { label: "Published", variant: "default" },
 };
+
+const PROVENANCE_CONFIG: Record<
+  "source_backed" | "expert_reviewed",
+  { label: string; variant: "outline" | "secondary"; help: string }
+> = {
+  source_backed: {
+    label: "Source-backed",
+    variant: "outline",
+    help: "Paraphrased from a cited public source. Not reviewed by an agricultural expert.",
+  },
+  expert_reviewed: {
+    label: "Expert-reviewed",
+    variant: "secondary",
+    help: "Reviewed by a named, qualified agricultural expert. Only use this if a real expert reviewed it.",
+  },
+};
+
+const EMPTY_FORM: KnowledgeArticleInput = {
+  crop: "tomato",
+  problem: "",
+  signs: "",
+  distinguishingQuestions: "",
+  approvedActions: "",
+  status: "draft",
+  version: "1.0",
+  provenance: "source_backed",
+  reviewer: undefined,
+  reviewedAt: undefined,
+  sourcePublisher: undefined,
+  sourceTitle: undefined,
+  sourceUrl: undefined,
+  sourceAccessedAt: undefined,
+  sourceLicense: undefined,
+};
+
+/** Format a nullable date for a text input (YYYY-MM-DD). */
+function toDateInput(value: Date | string | null | undefined): string {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
+}
 
 export default function GuidancePage() {
   const [articles, setArticles] = useState<Article[]>([]);
@@ -58,18 +106,11 @@ export default function GuidancePage() {
   const [openPublish, setOpenPublish] = useState<number | null>(null);
 
   // Form state (shared by create and edit)
-  const [form, setForm] = useState<KnowledgeArticleInput>({
-    crop: "tomato",
-    problem: "",
-    signs: "",
-    distinguishingQuestions: "",
-    approvedActions: "",
-    status: "draft",
-    version: "1.0",
-    reviewer: undefined,
-  });
+  const [form, setForm] = useState<KnowledgeArticleInput>({ ...EMPTY_FORM });
 
+  // Reviewer details captured when publishing expert-reviewed content.
   const [publishReviewer, setPublishReviewer] = useState("");
+  const [publishReviewedAt, setPublishReviewedAt] = useState("");
 
   async function reloadArticles() {
     try {
@@ -105,17 +146,16 @@ export default function GuidancePage() {
   }, []);
 
   const resetForm = () => {
-    setForm({
-      crop: "tomato",
-      problem: "",
-      signs: "",
-      distinguishingQuestions: "",
-      approvedActions: "",
-      status: "draft",
-      version: "1.0",
-      reviewer: undefined,
-    });
+    setForm({ ...EMPTY_FORM });
     setPublishReviewer("");
+    setPublishReviewedAt("");
+  };
+
+  /** Open the publish dialog for an article, pre-filling expert review details. */
+  const openPublishFor = (article: Article) => {
+    setPublishReviewer(article.reviewer ?? "");
+    setPublishReviewedAt(toDateInput(article.reviewedAt));
+    setOpenPublish(article.id);
   };
 
   const handleCreate = async (event: React.FormEvent) => {
@@ -130,6 +170,14 @@ export default function GuidancePage() {
         approvedActions: form.approvedActions,
         status: "draft",
         version: form.version,
+        provenance: form.provenance,
+        reviewer: form.reviewer,
+        reviewedAt: form.reviewedAt,
+        sourcePublisher: form.sourcePublisher,
+        sourceTitle: form.sourceTitle,
+        sourceUrl: form.sourceUrl,
+        sourceAccessedAt: form.sourceAccessedAt,
+        sourceLicense: form.sourceLicense,
       });
       resetForm();
       setOpenCreate(false);
@@ -154,7 +202,14 @@ export default function GuidancePage() {
         approvedActions: form.approvedActions,
         status: form.status,
         version: form.version,
+        provenance: form.provenance,
         reviewer: form.reviewer,
+        reviewedAt: form.reviewedAt,
+        sourcePublisher: form.sourcePublisher,
+        sourceTitle: form.sourceTitle,
+        sourceUrl: form.sourceUrl,
+        sourceAccessedAt: form.sourceAccessedAt,
+        sourceLicense: form.sourceLicense,
       });
       resetForm();
       setOpenEdit(null);
@@ -181,10 +236,26 @@ export default function GuidancePage() {
   };
 
   const handlePublish = async () => {
-    if (openPublish === null || !publishReviewer.trim()) return;
+    if (openPublish === null) return;
+    const target = articles.find((a) => a.id === openPublish);
+    if (!target) return;
+
+    const isExpert = target.provenance === "expert_reviewed";
+    // Expert-reviewed content must name the reviewer; source-backed content
+    // must not imply one, so no reviewer is collected for it.
+    if (isExpert && !publishReviewer.trim()) return;
+
     setSaving(true);
     try {
-      await publishKnowledgeArticle(openPublish, publishReviewer.trim());
+      await publishKnowledgeArticle(
+        openPublish,
+        isExpert
+          ? {
+              reviewer: publishReviewer.trim(),
+              reviewedAt: publishReviewedAt || undefined,
+            }
+          : undefined
+      );
       resetForm();
       setOpenPublish(null);
       await reloadArticles();
@@ -204,17 +275,29 @@ export default function GuidancePage() {
       approvedActions: article.approvedActions,
       status: article.status,
       version: article.version,
+      provenance: article.provenance,
       reviewer: article.reviewer ?? undefined,
+      reviewedAt: toDateInput(article.reviewedAt) || undefined,
+      sourcePublisher: article.sourcePublisher ?? undefined,
+      sourceTitle: article.sourceTitle ?? undefined,
+      sourceUrl: article.sourceUrl ?? undefined,
+      sourceAccessedAt: toDateInput(article.sourceAccessedAt) || undefined,
+      sourceLicense: article.sourceLicense ?? undefined,
     });
     setOpenEdit(article.id);
   };
 
   const statusCfg = STATUS_CONFIG;
+  const provenanceCfg = PROVENANCE_CONFIG;
+  const publishTarget =
+    openPublish === null
+      ? null
+      : articles.find((a) => a.id === openPublish) ?? null;
 
   return (
     <AdminShell
       title="Crop guidance"
-      subtitle="Keep farmer-facing advice accurate and reviewed."
+      subtitle="Curate advice with clear provenance. Published source-backed guidance is never presented as expert-reviewed."
     >
       {error && (
         <div className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
@@ -272,19 +355,32 @@ export default function GuidancePage() {
                         {article.signs}
                       </p>
                     </div>
-                    <Badge
-                      variant={cfg.variant as "default" | "outline"}
-                      className="text-xs uppercase tracking-tight"
-                    >
-                      {cfg.label}
-                    </Badge>
+                    <div className="flex flex-col items-end gap-1">
+                      <Badge
+                        variant={cfg.variant as "default" | "outline"}
+                        className="text-xs uppercase tracking-tight"
+                      >
+                        {cfg.label}
+                      </Badge>
+                      <Badge
+                        variant={
+                          provenanceCfg[article.provenance].variant as
+                            | "outline"
+                            | "secondary"
+                        }
+                        className="text-[10px]"
+                      >
+                        {provenanceCfg[article.provenance].label}
+                      </Badge>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {article.reviewer && (
-                      <span className="text-xs text-muted-foreground">
-                        Reviewed by {article.reviewer}
-                      </span>
-                    )}
+                    {article.provenance === "expert_reviewed" &&
+                      article.reviewer && (
+                        <span className="text-xs text-muted-foreground">
+                          Reviewed by {article.reviewer}
+                        </span>
+                      )}
                     {article.status !== "published" && (
                       <Button
                         variant="outline"
@@ -309,7 +405,7 @@ export default function GuidancePage() {
                       <Button
                         variant="default"
                         size="sm"
-                        onClick={() => setOpenPublish(article.id)}
+                        onClick={() => openPublishFor(article)}
                         disabled={saving}
                       >
                         Publish
@@ -333,10 +429,31 @@ export default function GuidancePage() {
                     </div>
                     <div className="sm:col-span-2">
                       <p className="text-muted-foreground text-[10px] uppercase mb-1">
-                        Approved actions
+                        Safe actions
                       </p>
                       <p className="text-sm">{article.approvedActions}</p>
                     </div>
+                    {article.provenance === "source_backed" && (
+                      <div className="sm:col-span-2 rounded-md bg-muted/50 p-2">
+                        <p className="text-muted-foreground text-[10px] uppercase mb-1">
+                          Source (not expert-reviewed)
+                        </p>
+                        <p className="text-sm">
+                          {article.sourcePublisher ?? "No publisher"}
+                          {article.sourceTitle ? ` — ${article.sourceTitle}` : ""}
+                        </p>
+                        {article.sourceUrl && (
+                          <p className="text-xs text-muted-foreground break-all">
+                            {article.sourceUrl}
+                          </p>
+                        )}
+                        {article.sourceLicense && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Terms: {article.sourceLicense}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
                     <Globe className="size-3.5" />
@@ -420,6 +537,7 @@ export default function GuidancePage() {
                 }
               />
             </div>
+            <ProvenanceFields form={form} setForm={setForm} />
             <Button type="submit" disabled={saving} className="w-full">
               {saving ? "Creating…" : "Create article"}
             </Button>
@@ -525,6 +643,7 @@ export default function GuidancePage() {
                 }
               />
             </div>
+            <ProvenanceFields form={form} setForm={setForm} />
             <Button type="submit" disabled={saving} className="w-full">
               {saving ? "Saving…" : "Save changes"}
             </Button>
@@ -554,24 +673,71 @@ export default function GuidancePage() {
             <SheetContentTitle>Publish guidance article</SheetContentTitle>
           </SheetContentHeader>
           <CardContent className="p-4 space-y-4">
-            <p className="text-sm">
-              Publishing makes this guidance available to the AI crop assessment
-              pipeline. Provide the name of the agricultural expert who reviewed
-              this article.
-            </p>
-            <div className="space-y-2">
-              <Label>Reviewer name</Label>
-              <Input
-                value={publishReviewer}
-                onChange={(e) => setPublishReviewer(e.target.value)}
-              />
-            </div>
+            {publishTarget?.provenance === "expert_reviewed" ? (
+              <>
+                <p className="text-sm">
+                  Publishing makes this guidance available to the AI crop
+                  assessment pipeline. This article is marked{" "}
+                  <strong>expert-reviewed</strong>, so record the qualified
+                  expert who reviewed it.
+                </p>
+                <div className="space-y-2">
+                  <Label>Reviewer name</Label>
+                  <Input
+                    value={publishReviewer}
+                    onChange={(e) => setPublishReviewer(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Review date</Label>
+                  <Input
+                    type="date"
+                    value={publishReviewedAt}
+                    onChange={(e) => setPublishReviewedAt(e.target.value)}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm">
+                  Publishing makes this guidance available to the AI crop
+                  assessment pipeline as{" "}
+                  <strong>source-backed reference material</strong>. It will be
+                  labelled source-backed and will NOT be presented as
+                  expert-reviewed.
+                </p>
+                <div className="rounded-md bg-muted/50 p-3 text-sm">
+                  <p className="font-medium">
+                    {publishTarget?.sourcePublisher ?? "No publisher recorded"}
+                  </p>
+                  {publishTarget?.sourceTitle && (
+                    <p className="text-muted-foreground">
+                      {publishTarget.sourceTitle}
+                    </p>
+                  )}
+                  {publishTarget?.sourceUrl && (
+                    <p className="text-xs text-muted-foreground break-all">
+                      {publishTarget.sourceUrl}
+                    </p>
+                  )}
+                </div>
+                {publishTarget &&
+                  (!publishTarget.sourcePublisher ||
+                    !publishTarget.sourceTitle ||
+                    !publishTarget.sourceUrl) && (
+                    <p className="text-sm text-destructive">
+                      Add the source publisher, title, and URL before publishing.
+                    </p>
+                  )}
+              </>
+            )}
           </CardContent>
           <div className="p-4 flex justify-end space-x-2">
             <Button
               variant="outline"
               onClick={() => {
                 setPublishReviewer("");
+                setPublishReviewedAt("");
                 setOpenPublish(null);
               }}
             >
@@ -579,7 +745,11 @@ export default function GuidancePage() {
             </Button>
             <Button
               onClick={handlePublish}
-              disabled={saving || !publishReviewer.trim()}
+              disabled={
+                saving ||
+                (publishTarget?.provenance === "expert_reviewed" &&
+                  !publishReviewer.trim())
+              }
             >
               {saving ? "Publishing…" : "Publish"}
             </Button>
@@ -603,5 +773,120 @@ function SheetContentHeader({ children }: { children: React.ReactNode }) {
 function SheetContentTitle({ children }: { children: React.ReactNode }) {
   return (
     <h2 className="text-lg font-semibold">{children}</h2>
+  );
+}
+
+/**
+ * Provenance + source fields, shared by the create and edit forms.
+ * The fields shown depend on the chosen provenance so an admin filling in a
+ * source-backed article is never asked to name an expert (which would imply a
+ * review that did not happen).
+ */
+function ProvenanceFields({
+  form,
+  setForm,
+}: {
+  form: KnowledgeArticleInput;
+  setForm: React.Dispatch<React.SetStateAction<KnowledgeArticleInput>>;
+}) {
+  const provenance = form.provenance ?? "source_backed";
+  const isSource = provenance !== "expert_reviewed";
+
+  return (
+    <div className="space-y-3 rounded-lg border border-border/70 p-3">
+      <div className="space-y-2">
+        <Label>Provenance</Label>
+        <select
+          value={provenance}
+          onChange={(e) =>
+            setForm({
+              ...form,
+              provenance: e.target.value as "source_backed" | "expert_reviewed",
+            })
+          }
+          className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <option value="source_backed">
+            Source-backed (cited public reference)
+          </option>
+          <option value="expert_reviewed">
+            Expert-reviewed (qualified human reviewed it)
+          </option>
+        </select>
+        <p className="text-xs text-muted-foreground">
+          {PROVENANCE_CONFIG[provenance].help}
+        </p>
+      </div>
+
+      {isSource ? (
+        <>
+          <div className="space-y-2">
+            <Label>Source publisher</Label>
+            <Input
+              value={form.sourcePublisher ?? ""}
+              onChange={(e) =>
+                setForm({ ...form, sourcePublisher: e.target.value })
+              }
+              placeholder="e.g. University of California Statewide IPM Program"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Source title</Label>
+            <Input
+              value={form.sourceTitle ?? ""}
+              onChange={(e) =>
+                setForm({ ...form, sourceTitle: e.target.value })
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Source URL</Label>
+            <Input
+              value={form.sourceUrl ?? ""}
+              onChange={(e) => setForm({ ...form, sourceUrl: e.target.value })}
+              placeholder="https://"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Source access date</Label>
+            <Input
+              type="date"
+              value={form.sourceAccessedAt ?? ""}
+              onChange={(e) =>
+                setForm({ ...form, sourceAccessedAt: e.target.value })
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Source terms / licence</Label>
+            <Input
+              value={form.sourceLicense ?? ""}
+              onChange={(e) =>
+                setForm({ ...form, sourceLicense: e.target.value })
+              }
+              placeholder="e.g. educational, noncommercial use with attribution"
+            />
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="space-y-2">
+            <Label>Reviewer name</Label>
+            <Input
+              value={form.reviewer ?? ""}
+              onChange={(e) => setForm({ ...form, reviewer: e.target.value })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Review date</Label>
+            <Input
+              type="date"
+              value={form.reviewedAt ?? ""}
+              onChange={(e) => setForm({ ...form, reviewedAt: e.target.value })}
+            />
+          </div>
+        </>
+      )}
+    </div>
   );
 }

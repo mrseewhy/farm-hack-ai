@@ -4,6 +4,7 @@ import {
   text,
   timestamp,
   integer,
+  boolean,
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
@@ -74,11 +75,20 @@ export const assessments = pgTable("assessments", {
   messageId: integer("message_id")
     .notNull()
     .references(() => messages.id, { onDelete: "cascade" }),
+  // The assistant reply that this assessment produced. Stored explicitly so
+  // retries and history reloads never have to guess which reply belongs to
+  // which farmer message (previously inferred from array position, which broke
+  // after deletes or concurrent turns).
+  assistantMessageId: integer("assistant_message_id").references(
+    () => messages.id,
+    { onDelete: "set null" }
+  ),
   structuredResult: text("structured_result").notNull(), // JSON string
   model: text("model").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("assessments_conversation_id_idx").on(table.conversationId),
+  index("assessments_assistant_message_id_idx").on(table.assistantMessageId),
   // One assessment per message. This makes the runAssessment idempotency check
   // atomic under concurrent submissions instead of a check-then-insert race.
   uniqueIndex("assessments_message_id_unique").on(table.messageId),
@@ -98,6 +108,39 @@ export const adminAuditEvents = pgTable("admin_audit_events", {
   targetId: text("target_id").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+/**
+ * AI telemetry events table
+ * One row per model assessment attempt, used to monitor provider health and
+ * safety behaviour in production. Deliberately metadata-only: it stores no
+ * farmer text, prompts, model output, or image URLs.
+ *
+ * conversation_id is nullable and set to null when a conversation is deleted,
+ * so operational metrics survive data deletion.
+ */
+export const aiEvents = pgTable("ai_events", {
+  id: serial("id").primaryKey(),
+  conversationId: integer("conversation_id").references(
+    () => conversations.id,
+    { onDelete: "set null" }
+  ),
+  eventType: text("event_type").notNull().default("assessment"),
+  promptVersion: text("prompt_version").notNull(),
+  modelRequested: text("model_requested").notNull(),
+  modelUsed: text("model_used"),
+  fallbackUsed: boolean("fallback_used").notNull().default(false),
+  fallbackAttempts: integer("fallback_attempts").notNull().default(1),
+  latencyMs: integer("latency_ms").notNull().default(0),
+  safetyFlagCount: integer("safety_flag_count").notNull().default(0),
+  imageTotal: integer("image_total").notNull().default(0),
+  imageFailed: integer("image_failed").notNull().default(0),
+  validationOutcome: text("validation_outcome").notNull().default("valid"),
+  outcome: text("outcome").notNull().default("ok"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("ai_events_created_at_idx").on(table.createdAt),
+  index("ai_events_outcome_idx").on(table.outcome),
+]);
 
 /**
  * Relations for query building
@@ -139,8 +182,18 @@ export const assessmentsRelations = relations(assessments, ({ one }) => ({
 
 /**
  * Knowledge articles table
- * Expert-reviewed crop guidance for tomato problems.
- * Status flow: draft → in_review → published.
+ * Curated crop guidance for tomato problems, used as retrieval context for the
+ * AI assessment pipeline. Status flow: draft → in_review → published.
+ *
+ * Provenance is the critical trust field. It is deliberately NOT tied to
+ * publication status: an administrator publishing an article does NOT imply
+ * agricultural expert approval.
+ *   source_backed   paraphrased or quoted from a cited, publicly available
+ *                   source (see the source_* columns)
+ *   expert_reviewed content an appropriately qualified human expert actually
+ *                   reviewed (see reviewer / reviewed_at)
+ * The distinction is enforced by `lib/guidance.ts` and surfaced to the model in
+ * the prompt, so source-backed guidance is never described as expert-reviewed.
  */
 export const knowledgeArticles = pgTable("knowledge_articles", {
   id: serial("id").primaryKey(),
@@ -148,11 +201,17 @@ export const knowledgeArticles = pgTable("knowledge_articles", {
   problem: text("problem").notNull(), // e.g. "Early blight", "Bacterial wilt"
   signs: text("signs").notNull(), // observable signs
   distinguishingQuestions: text("distinguishing_questions").notNull(), // questions to ask farmer
-  approvedActions: text("approved_actions").notNull(), // safe, expert-approved actions
+  approvedActions: text("approved_actions").notNull(), // safe actions from the source or expert
   status: text("status").notNull().default("draft"), // draft | in_review | published
   version: text("version").notNull().default("1.0"),
-  reviewer: text("reviewer"), // name of agricultural expert who reviewed
-  reviewedAt: timestamp("reviewed_at"), // when reviewed
+  provenance: text("provenance").notNull().default("source_backed"), // source_backed | expert_reviewed
+  reviewer: text("reviewer"), // name of agricultural expert who reviewed (expert_reviewed only)
+  reviewedAt: timestamp("reviewed_at"), // when an expert reviewed it
+  sourcePublisher: text("source_publisher"), // e.g. "University of California Statewide IPM Program"
+  sourceTitle: text("source_title"), // e.g. "Early Blight — UC IPM Pest Management Guidelines: Tomato"
+  sourceUrl: text("source_url"), // canonical URL
+  sourceAccessedAt: timestamp("source_accessed_at"), // when the source was retrieved/paraphrased
+  sourceLicense: text("source_license"), // usage/attribution terms for the source
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -199,6 +258,7 @@ export const tables = {
   messageImages,
   assessments,
   adminAuditEvents,
+  aiEvents,
   knowledgeArticles,
   followUps,
 } as const;

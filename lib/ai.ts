@@ -1,4 +1,28 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import {
+  assessmentResultSchema,
+  type AssessmentResult,
+} from "@/lib/data/validation/assessment";
+import {
+  applyEvidencePolicy,
+  applySafeguards,
+  finalAudit,
+  safeFallbackAssessment,
+  SAFE_HELP_FALLBACK,
+} from "@/lib/safety";
+import {
+  isImageContentType,
+  MIN_IMAGE_BYTES,
+  sniffImageMimeType,
+} from "@/lib/image";
+import {
+  PROMPT_VERSION,
+  type AiEventOutcome,
+  type AiValidationOutcome,
+} from "@/lib/monitoring";
+
+// Re-export the contract so server actions keep importing it from "@/lib/ai".
+export type { AssessmentResult } from "@/lib/data/validation/assessment";
 
 let genAI: GoogleGenerativeAI | null = null;
 
@@ -103,229 +127,24 @@ export const assessmentSchema = {
   },
 } as const;
 
-export type AssessmentResult = {
-  observedSigns: string[];
-  possibleCauses: string[];
-  followUpQuestions: string[];
-  immediateActions: string[];
-  whenToSeekHelp: string;
-  uncertainty: {
-    level: "low" | "medium" | "high";
-    reason: string;
-  };
-};
-
 export type ConversationTurn = {
   role: "user" | "assistant";
   content: string;
 };
 
-type ContentPart =
+export type ContentPart =
   | { text: string }
   | { inlineData: { data: string; mimeType: string } };
 
-type Content = {
+export type Content = {
   role: "user" | "model";
   parts: ContentPart[];
 };
 
 /**
- * Pesticide active ingredients that must NOT be recommended without
- * expert-reviewed guidance. This is a deterministic safeguard list.
- */
-const RESTRICTED_PESTICIDES = [
-  "glyphosate",
-  "chlorpyrifos",
-  "imidacloprid",
-  "lambda-cyhalothrin",
-  "acetamiprid",
-  "thiamethoxam",
-  "clothianidin",
-  "cypermethrin",
-  "deltamethrin",
-  "malathion",
-  "carbaryl",
-  "mancozeb",
-  "chlorothalonil",
-  "copper oxychloride",
-  "paraquat",
-  "dichlorvos",
-  "profenofos",
-  "carbendazim",
-];
-
-/** Definite-diagnosis phrasing that must never be presented as fact. */
-function checkDefiniteDiagnosis(text: string): string[] {
-  const definitePatterns = [
-    /this is (definitely|certainly|absolutely|clearly) /i,
-    /the diagnosis is /i,
-    /your plant has /i,
-    /it is (definitely|certainly|absolutely|clearly) /i,
-    /confirmed (diagnosis|case of)/i,
-    /positive for /i,
-  ];
-
-  return definitePatterns
-    .filter((pattern) => pattern.test(text))
-    .map((pattern) => pattern.source);
-}
-
-function checkRestrictedPesticides(text: string): string[] {
-  const lowerText = text.toLowerCase();
-  return RESTRICTED_PESTICIDES.filter((pesticide) =>
-    lowerText.includes(pesticide.toLowerCase())
-  );
-}
-
-/** Dose/quantity phrasing that must not reach a farmer without expert review. */
-function checkDoseRecommendations(text: string): string[] {
-  const dosePatterns = [
-    /\d+\s*(ml|liter|litre|lita|litre|spoon|cap|sachet|tablespoon|teaspoon|g|kg|gram|kilogram|mg)\b/i,
-    /(mix|dilute|spray|apply|use)\s+\d+/i,
-    /\d+\s*(per|in|for)\s+(liter|litre|gal|gallon|acre|hectare|plot)\b/i,
-  ];
-
-  return dosePatterns
-    .filter((pattern) => pattern.test(text))
-    .map((pattern) => pattern.source);
-}
-
-/**
- * Collect every deterministic safety flag for one field.
- *
- * The phrase lists above only cover English, so any explicit numeric quantity
- * in a non-English response is treated as unsafe: dosage instructions are the
- * highest-risk output and cannot be pattern-checked reliably in Yoruba, Hausa
- * or Igbo. This is deliberately conservative.
- */
-function collectFlags(
-  text: string,
-  language: string,
-  options: { includeDiagnosis?: boolean } = {}
-): string[] {
-  const flags = [
-    ...checkRestrictedPesticides(text),
-    ...checkDoseRecommendations(text),
-  ];
-
-  if (options.includeDiagnosis) {
-    flags.push(...checkDefiniteDiagnosis(text));
-  }
-
-  if (language !== "English" && /\d/.test(text)) {
-    flags.push("numeric quantity in a non-English response");
-  }
-
-  return flags;
-}
-
-const SAFE_HELP_FALLBACK =
-  "Consult a local agricultural extension worker if you are unsure.";
-
-/**
- * Apply safeguards to the AI assessment result.
- * Removes restricted pesticide names, definite diagnoses, and dose
- * recommendations from every farmer-facing field, and escalates uncertainty.
- */
-function applySafeguards(
-  result: AssessmentResult,
-  language: string
-): {
-  result: AssessmentResult;
-  warnings: string[];
-} {
-  const warnings: string[] = [];
-
-  const safeCauses: string[] = [];
-  for (const cause of result.possibleCauses) {
-    const flags = collectFlags(cause, language, { includeDiagnosis: true });
-    if (flags.length > 0) {
-      warnings.push(
-        `Possible cause removed for safety: "${cause}" (${flags.join(", ")})`
-      );
-    } else {
-      safeCauses.push(cause);
-    }
-  }
-
-  const safeActions: string[] = [];
-  for (const action of result.immediateActions) {
-    const flags = collectFlags(action, language, { includeDiagnosis: true });
-    if (flags.length > 0) {
-      warnings.push(
-        `Action removed for safety: "${action}" (${flags.join(", ")})`
-      );
-    } else {
-      safeActions.push(action);
-    }
-  }
-
-  const safeSigns: string[] = [];
-  for (const sign of result.observedSigns) {
-    const flags = checkRestrictedPesticides(sign);
-    if (flags.length > 0) {
-      warnings.push(
-        `Observed sign removed for safety: "${sign}" (${flags.join(", ")})`
-      );
-    } else {
-      safeSigns.push(sign);
-    }
-  }
-
-  const safeQuestions: string[] = [];
-  for (const question of result.followUpQuestions) {
-    const flags = collectFlags(question, language);
-    if (flags.length > 0) {
-      warnings.push(
-        `Follow-up question removed for safety: "${question}" (${flags.join(", ")})`
-      );
-    } else {
-      safeQuestions.push(question);
-    }
-  }
-
-  let whenToSeekHelp = result.whenToSeekHelp;
-  const helpFlags = collectFlags(whenToSeekHelp, language);
-  if (helpFlags.length > 0) {
-    warnings.push(
-      `Escalation advice replaced for safety (${helpFlags.join(", ")})`
-    );
-    whenToSeekHelp = SAFE_HELP_FALLBACK;
-  }
-
-  // If any safeguards triggered, escalate uncertainty.
-  let uncertaintyLevel = result.uncertainty.level;
-  if (warnings.length > 0 && uncertaintyLevel === "low") {
-    uncertaintyLevel = "medium";
-  }
-  if (warnings.length > 2 && uncertaintyLevel === "medium") {
-    uncertaintyLevel = "high";
-  }
-
-  const uncertaintyReason =
-    warnings.length > 0
-      ? `${result.uncertainty.reason} Some content was filtered for safety (${warnings.length} item(s) removed).`
-      : result.uncertainty.reason;
-
-  return {
-    result: {
-      observedSigns: safeSigns,
-      possibleCauses: safeCauses,
-      followUpQuestions: safeQuestions,
-      immediateActions: safeActions,
-      whenToSeekHelp,
-      uncertainty: {
-        level: uncertaintyLevel,
-        reason: uncertaintyReason,
-      },
-    },
-    warnings,
-  };
-}
-
-/**
- * Build the model's system instruction with optional expert-reviewed guidance.
- * The guidance text is passed in by the server action.
+ * Build the model's system instruction with optional curated guidance.
+ * The guidance text is passed in by the server action and carries its own
+ * provenance labels.
  */
 function buildSystemPrompt(
   language: string,
@@ -344,8 +163,14 @@ CRITICAL SAFETY RULES:
 5. Escalate severe or spreading cases to a local agricultural extension worker.
 6. Respond in the farmer's chosen language.
 7. Keep responses practical and actionable for smallholder farmers.
-8. Use the expert-reviewed tomato guidance below as context. Reference approved actions
-   when symptoms match known problems. Do not invent treatments.
+8. If curated tomato reference material is provided below, use it only as background.
+   Follow its provenance labels: source-backed material was paraphrased from a cited public
+   source and was NOT reviewed by an agricultural expert. NEVER describe source-backed
+   guidance as expert-reviewed or authoritative. Reference its safe actions only when
+   symptoms match, and do not invent treatments.
+9. If an attached photo is blurry, unrelated to a tomato plant, or otherwise cannot be
+   examined, say so explicitly in observedSigns and raise uncertainty. Ask for a clearer
+   photo instead of guessing from it.
 
 ${guidanceContext}
 
@@ -419,6 +244,12 @@ async function imageToInlineData(secureUrl: string): Promise<ContentPart> {
       throw new Error(`Failed to fetch image: ${response.status}`);
     }
 
+    // Reject non-image responses early. An error page or JSON payload can
+    // otherwise be silently forwarded to the model as if it were a photo.
+    if (!isImageContentType(response.headers.get("content-type"))) {
+      throw new Error("Fetched resource is not an image");
+    }
+
     const contentLength = response.headers.get("content-length");
     if (contentLength && Number(contentLength) > MAX_IMAGE_BYTES) {
       throw new Error("Image too large for analysis");
@@ -428,22 +259,30 @@ async function imageToInlineData(secureUrl: string): Promise<ContentPart> {
     if (buffer.byteLength > MAX_IMAGE_BYTES) {
       throw new Error("Image too large for analysis");
     }
+    if (buffer.byteLength < MIN_IMAGE_BYTES) {
+      throw new Error("Image is too small to analyze");
+    }
+
+    const bytes = new Uint8Array(buffer);
+    // Trust the bytes, not the header: send the sniffed MIME type.
+    const sniffed = sniffImageMimeType(bytes);
+    if (!sniffed) {
+      throw new Error("Fetched file is not a valid JPEG, PNG, or WebP image");
+    }
 
     const base64 = Buffer.from(buffer).toString("base64");
-    const mimeType = response.headers.get("content-type") ?? "image/jpeg";
-    return { inlineData: { data: base64, mimeType } };
+    return { inlineData: { data: base64, mimeType: sniffed } };
   } finally {
     clearTimeout(timeoutId);
   }
 }
 
-function toStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === "string");
-}
-
-/** Normalize an arbitrary parsed object into the assessment contract. */
-function normalizeAssessment(raw: unknown): AssessmentResult {
+/**
+ * Fill only the fields that are safe to default (missing arrays, missing
+ * escalation text, missing uncertainty). Wrong-but-present types are left
+ * alone so the Zod schema can still reject them.
+ */
+function coerceAssessment(raw: unknown): unknown {
   const record =
     typeof raw === "object" && raw !== null
       ? (raw as Record<string, unknown>)
@@ -453,86 +292,117 @@ function normalizeAssessment(raw: unknown): AssessmentResult {
       ? (record.uncertainty as Record<string, unknown>)
       : {};
 
+  // Missing arrays become empty; overlong arrays are trimmed to the schema
+  // limit. Non-array values are left untouched so they are still rejected.
+  const asArray = (value: unknown): unknown =>
+    Array.isArray(value) ? value.slice(0, 20) : (value ?? []);
+
+  const asText = (value: unknown, fallback: string): unknown =>
+    typeof value === "string" && value.trim() ? value : fallback;
+
   return {
-    observedSigns: toStringArray(record.observedSigns),
-    possibleCauses: toStringArray(record.possibleCauses),
-    followUpQuestions: toStringArray(record.followUpQuestions),
-    immediateActions: toStringArray(record.immediateActions),
-    whenToSeekHelp:
-      typeof record.whenToSeekHelp === "string"
-        ? record.whenToSeekHelp
-        : SAFE_HELP_FALLBACK,
+    observedSigns: asArray(record.observedSigns),
+    possibleCauses: asArray(record.possibleCauses),
+    followUpQuestions: asArray(record.followUpQuestions),
+    immediateActions: asArray(record.immediateActions),
+    whenToSeekHelp: asText(record.whenToSeekHelp, SAFE_HELP_FALLBACK),
     uncertainty: {
-      level: ["low", "medium", "high"].includes(String(uncertainty.level))
-        ? (uncertainty.level as "low" | "medium" | "high")
-        : "medium",
-      reason:
-        typeof uncertainty.reason === "string"
-          ? uncertainty.reason
-          : "Limited information available for assessment.",
+      level: uncertainty.level ?? "medium",
+      reason: asText(
+        uncertainty.reason,
+        "Limited information available for assessment."
+      ),
     },
   };
 }
 
 /**
- * Send a crop assessment request to Gemini.
- * Accepts text symptoms, image URLs, language, prior turns, and optional
- * guidance context. Applies safeguards before returning.
+ * Validate one parsed model response against the assessment contract.
+ * Returns null when the payload cannot be recovered; callers then use the
+ * safe fallback. Every coercion is logged so malformed prompts are visible.
+ * The outcome is returned so monitoring can distinguish a clean response from
+ * a recovered one without re-parsing.
  */
-export async function assessCropHealth({
-  symptoms,
-  images,
-  language,
-  guidanceContext,
-  history = [],
-}: {
-  symptoms: string;
-  images: Array<{ secureUrl: string }>;
-  language: string;
-  guidanceContext?: string;
-  history?: ConversationTurn[];
-}): Promise<{ assessment: AssessmentResult; model: string }> {
-  // Prior turns give the model the context it needs for follow-up questions.
-  const contents: Content[] = history
-    .slice(-MAX_HISTORY_MESSAGES)
-    .map((turn) => ({
-      role: turn.role === "assistant" ? "model" : "user",
-      parts: [{ text: turn.content }],
-    }));
+function validateAssessment(raw: unknown): {
+  result: AssessmentResult | null;
+  outcome: AiValidationOutcome;
+} {
+  const direct = assessmentResultSchema.safeParse(raw);
+  if (direct.success) return { result: direct.data, outcome: "valid" };
 
-  const parts: ContentPart[] = [
-    {
-      text: `Language: ${language}\nFarmer's description of symptoms:\n${symptoms}\n\nAttachments: ${images.length} image(s)`,
-    },
-  ];
+  console.warn(
+    "AI assessment did not match the schema; attempting safe recovery:",
+    direct.error.issues.map((issue) => issue.path.join(".") || "(root)")
+  );
 
-  // Send real image bytes, not just URLs, so the model can inspect the crop.
-  for (const [index, img] of images.entries()) {
-    try {
-      parts.push(await imageToInlineData(img.secureUrl));
-    } catch (error) {
-      console.error(
-        `Failed to attach image ${index + 1} for AI assessment:`,
-        img.secureUrl,
-        error
-      );
-      parts.push({
-        text: `[Attached crop photo ${index + 1} could not be loaded for analysis.]`,
-      });
-    }
-  }
+  const recovered = assessmentResultSchema.safeParse(coerceAssessment(raw));
+  if (recovered.success) return { result: recovered.data, outcome: "recovered" };
 
-  contents.push({ role: "user", parts });
+  console.error(
+    "AI assessment could not be recovered after coercion:",
+    recovered.error.issues
+  );
+  return { result: null, outcome: "invalid" };
+}
 
+/**
+ * Metadata-only telemetry for one assessment attempt. Contains no farmer text
+ * or model output; see `lib/monitoring.ts`.
+ */
+export type AssessmentTelemetry = {
+  eventType: "assessment";
+  promptVersion: string;
+  modelRequested: string;
+  modelUsed: string | null;
+  fallbackUsed: boolean;
+  fallbackAttempts: number;
+  latencyMs: number;
+  safetyFlagCount: number;
+  imageTotal: number;
+  imageFailed: number;
+  validationOutcome: AiValidationOutcome;
+  outcome: AiEventOutcome;
+};
+
+/**
+ * Raw model response for one assessment, before any parsing or safety work.
+ * The evaluation harness records these so runs can be replayed offline.
+ */
+export type AssessmentRawResponse = {
+  text: string;
+  model: string;
+  /** How many candidate models were attempted before this one answered. */
+  fallbackAttempts?: number;
+};
+
+export type RawAssessmentResponder = (
+  contents: Content[],
+  options: { language: string; guidanceContext?: string }
+) => Promise<AssessmentRawResponse>;
+
+/**
+ * Call Gemini for one assessment and return the raw model text.
+ *
+ * Extracted from assessCropHealth so the evaluation harness can record a real
+ * response once and replay it later without duplicating the multi-model
+ * fallback logic.
+ */
+export async function generateRawAssessment(
+  contents: Content[],
+  options: { language: string; guidanceContext?: string }
+): Promise<AssessmentRawResponse> {
   const failures: string[] = [];
+  let attempts = 0;
 
   for (const candidate of MODEL_CANDIDATES) {
-    let text: string;
-
+    attempts += 1;
     try {
       const model = getGenAI().getGenerativeModel({
         model: candidate,
-        systemInstruction: buildSystemPrompt(language, guidanceContext ?? ""),
+        systemInstruction: buildSystemPrompt(
+          options.language,
+          options.guidanceContext ?? ""
+        ),
       });
 
       const result = await withRetry(() =>
@@ -553,44 +423,14 @@ export async function assessCropHealth({
         )
       );
 
-      text = result.response.text();
+      return { text: result.response.text(), model: candidate, fallbackAttempts: attempts };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       failures.push(`${candidate}: ${message}`);
       console.warn(
-        `AI model ${candidate} failed; trying the next configured model.`
+        `AI model ${candidate} failed (${message.slice(0, 200)}); trying the next configured model.`
       );
-      continue;
     }
-
-    const cleaned = text
-      .trim()
-      .replace(/^```(?:json)?/i, "")
-      .replace(/```$/, "")
-      .trim();
-
-    let parsed: AssessmentResult;
-    try {
-      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-      const jsonStr = jsonMatch ? jsonMatch[0] : cleaned;
-      parsed = normalizeAssessment(JSON.parse(jsonStr));
-    } catch (parseError) {
-      console.error(
-        "Failed to parse Gemini response:",
-        parseError,
-        "Raw:",
-        text
-      );
-      return { assessment: fallbackAssessment(), model: candidate };
-    }
-
-    const { result: safeResult, warnings } = applySafeguards(parsed, language);
-
-    if (warnings.length > 0) {
-      console.warn("AI assessment safeguards triggered:", warnings);
-    }
-
-    return { assessment: safeResult, model: candidate };
   }
 
   // Keep provider detail (status codes, quota links) in the server log; the
@@ -603,20 +443,212 @@ export async function assessCropHealth({
   );
 }
 
-/** Safe response used when the model responds but its JSON cannot be parsed. */
-function fallbackAssessment(): AssessmentResult {
+/**
+ * Parse, validate, and safety-process one raw model response.
+ *
+ * This is the only path from model text to a farmer-facing result, so it is
+ * shared by the live pipeline and the offline evaluation replay.
+ */
+function finalizeAssessment(
+  text: string,
+  model: string,
+  options: {
+    language: string;
+    evidence: { hasText: boolean; hasImages: boolean };
+    imageIssues?: { total: number; failed: number };
+    fallbackAttempts?: number;
+    latencyMs?: number;
+  }
+): { assessment: AssessmentResult; model: string; telemetry: AssessmentTelemetry } {
+  const { language, evidence, imageIssues } = options;
+
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?/i, "")
+    .replace(/```$/, "")
+    .trim();
+
+  let parsed: AssessmentResult | null = null;
+  let validationOutcome: AiValidationOutcome = "invalid";
+  try {
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    const jsonStr = jsonMatch ? jsonMatch[0] : cleaned;
+    const validated = validateAssessment(JSON.parse(jsonStr));
+    parsed = validated.result;
+    validationOutcome = validated.outcome;
+  } catch (parseError) {
+    console.error(
+      "Failed to parse Gemini response:",
+      parseError,
+      "Raw:",
+      text
+    );
+  }
+
+  const fallbackAttempts = options.fallbackAttempts ?? 1;
+
+  if (!parsed) {
+    console.error(
+      `AI response from ${model} could not be validated; using the safe fallback.`
+    );
+    return {
+      assessment: { ...safeFallbackAssessment(), imageIssues },
+      model,
+      telemetry: {
+        eventType: "assessment",
+        promptVersion: PROMPT_VERSION,
+        modelRequested: MODEL_NAME,
+        modelUsed: model,
+        fallbackUsed: fallbackAttempts > 1,
+        fallbackAttempts,
+        latencyMs: options.latencyMs ?? 0,
+        safetyFlagCount: 0,
+        imageTotal: imageIssues?.total ?? 0,
+        imageFailed: imageIssues?.failed ?? 0,
+        validationOutcome,
+        outcome: "fallback",
+      },
+    };
+  }
+
+  const { result: safeResult, warnings } = applySafeguards(parsed, language);
+
+  // Enforce the no-evidence policy, then run a final fail-closed audit over
+  // every farmer-facing string. If anything still trips a rule, the entire
+  // result is replaced with the safe fallback.
+  const policyResult = applyEvidencePolicy(safeResult, evidence);
+  const { result: auditedResult, warnings: auditWarnings } = finalAudit(
+    policyResult,
+    language
+  );
+  const allWarnings = [...warnings, ...auditWarnings];
+
+  if (allWarnings.length > 0) {
+    console.warn("AI assessment safeguards triggered:", allWarnings);
+  }
+
+  // A failed final audit replaces the whole result with the fallback, so it
+  // counts as a fallback rather than a filter that kept useful content.
+  const outcome: AiEventOutcome =
+    auditWarnings.length > 0
+      ? "fallback"
+      : allWarnings.length > 0
+        ? "filtered"
+        : "ok";
+
   return {
-    observedSigns: [],
-    possibleCauses: [],
-    followUpQuestions: ["Could you describe the symptoms in more detail?"],
-    immediateActions: [
-      "Consult a local agricultural extension worker for assistance.",
-    ],
-    whenToSeekHelp: "Please consult a local agricultural extension worker.",
-    uncertainty: {
-      level: "high",
-      reason:
-        "Unable to process the AI assessment. Please try again or consult an expert.",
+    assessment: {
+      ...auditedResult,
+      imageIssues,
+    },
+    model,
+    telemetry: {
+      eventType: "assessment",
+      promptVersion: PROMPT_VERSION,
+      modelRequested: MODEL_NAME,
+      modelUsed: model,
+      fallbackUsed: fallbackAttempts > 1,
+      fallbackAttempts,
+      latencyMs: options.latencyMs ?? 0,
+      safetyFlagCount: allWarnings.length,
+      imageTotal: imageIssues?.total ?? 0,
+      imageFailed: imageIssues?.failed ?? 0,
+      validationOutcome,
+      outcome,
     },
   };
+}
+
+/**
+ * Send a crop assessment request to Gemini.
+ * Accepts text symptoms, image URLs, language, prior turns, and optional
+ * guidance context. Applies safeguards before returning.
+ */
+export async function assessCropHealth({
+  symptoms,
+  images,
+  language,
+  guidanceContext,
+  history = [],
+  generateRaw,
+}: {
+  symptoms: string;
+  images: Array<{ secureUrl: string }>;
+  language: string;
+  guidanceContext?: string;
+  history?: ConversationTurn[];
+  /**
+   * Optional model responder. The evaluation harness supplies a recorded
+   * function so a case can be scored offline without another API call.
+   * Production leaves this undefined and uses the real Gemini client.
+   */
+  generateRaw?: RawAssessmentResponder;
+}): Promise<{
+  assessment: AssessmentResult;
+  model: string;
+  telemetry: AssessmentTelemetry;
+}> {
+  const startedAt = Date.now();
+
+  // Prior turns give the model the context it needs for follow-up questions.
+  const contents: Content[] = history
+    .slice(-MAX_HISTORY_MESSAGES)
+    .map((turn) => ({
+      role: turn.role === "assistant" ? "model" : "user",
+      parts: [{ text: turn.content }],
+    }));
+
+  const parts: ContentPart[] = [
+    {
+      text: `Language: ${language}\nFarmer's description of symptoms:\n${symptoms}\n\nAttachments: ${images.length} image(s)`,
+    },
+  ];
+
+  // Send real image bytes, not just URLs, so the model can inspect the crop.
+  // Track failures so the farmer can be told explicitly when a photo was not
+  // examined instead of receiving an assessment that silently ignored it.
+  let failedImages = 0;
+  for (const [index, img] of images.entries()) {
+    try {
+      parts.push(await imageToInlineData(img.secureUrl));
+    } catch (error) {
+      failedImages += 1;
+      console.error(
+        `Failed to attach image ${index + 1} for AI assessment:`,
+        img.secureUrl,
+        error
+      );
+      parts.push({
+        text: `[Attached crop photo ${index + 1} could not be loaded for analysis. Tell the farmer this photo could not be examined.]`,
+      });
+    }
+  }
+  const imageIssues =
+    images.length > 0
+      ? { total: images.length, failed: failedImages }
+      : undefined;
+
+  contents.push({ role: "user", parts });
+
+  const responder = generateRaw ?? generateRawAssessment;
+  const raw = await responder(contents, { language, guidanceContext });
+
+  const { assessment, model, telemetry } = finalizeAssessment(
+    raw.text,
+    raw.model,
+    {
+      language,
+      evidence: {
+        hasText: symptoms.trim().length > 0,
+        hasImages: images.length > 0,
+      },
+      imageIssues,
+      fallbackAttempts: raw.fallbackAttempts,
+      // End-to-end latency, including image fetch: this is what the farmer
+      // actually waits for, so it is the number worth monitoring.
+      latencyMs: Date.now() - startedAt,
+    }
+  );
+
+  return { assessment, model, telemetry };
 }

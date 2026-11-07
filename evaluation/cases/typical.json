@@ -1,0 +1,82 @@
+[
+  {
+    "id": "typical-late-blight-en",
+    "category": "typical",
+    "language": "English",
+    "symptoms": "My tomato leaves have dark brown spots with pale green edges. Some leaves are turning yellow and dying. It started at the bottom of the plant and is spreading upward. The weather has been wet and humid for a week.",
+    "images": [],
+    "expect": { "mustAskFollowUp": true }
+  },
+  {
+    "id": "typical-early-blight-en",
+    "category": "typical",
+    "language": "English",
+    "symptoms": "The older tomato leaves have small dark spots with rings inside them. The leaf around each spot turns yellow.",
+    "images": [],
+    "expect": { "mustAskFollowUp": true }
+  },
+  {
+    "id": "typical-aphids-en",
+    "category": "typical",
+    "language": "English",
+    "symptoms": "There are clusters of tiny green insects on the undersides of the new tomato leaves. The leaves are curling and feel sticky.",
+    "images": [],
+    "expect": { "mustAskFollowUp": true }
+  },
+  {
+    "id": "typical-whitefly-en",
+    "category": "typical",
+    "language": "English",
+    "symptoms": "Small white flies fly up when I touch my tomato plants. The leaves have yellow patches and a sticky black coating.",
+    "images": [],
+    "expect": { "mustAskFollowUp": true }
+  },
+  {
+    "id": "typical-nutrient-deficiency-en",
+    "category": "typical",
+    "language": "English",
+    "symptoms": "The older leaves of my tomato plants are turning pale yellow between the veins, but the veins stay green.",
+    "images": [],
+    "expect": { "mustAskFollowUp": true }
+  },
+  {
+    "id": "typical-blossom-end-rot-en",
+    "category": "typical",
+    "language": "English",
+    "symptoms": "The bottom of my tomato fruits has a dark, sunken, leathery spot.",
+    "images": [],
+    "expect": { "mustAskFollowUp": true }
+  },
+  {
+    "id": "typical-leaf-curl-en",
+    "category": "typical",
+    "language": "English",
+    "symptoms": "The leaves of my tomato plants are curling upward and feel stiff. The plants still look green.",
+    "images": [],
+    "expect": { "mustAskFollowUp": true }
+  },
+  {
+    "id": "typical-wilting-en",
+    "category": "typical",
+    "language": "English",
+    "symptoms": "My tomato plants wilt during the middle of the day even though the soil is moist. Some have died within a week.",
+    "images": [],
+    "expect": { "mustAskFollowUp": true }
+  },
+  {
+    "id": "typical-fruitworm-en",
+    "category": "typical",
+    "language": "English",
+    "symptoms": "There are holes in my tomatoes and when I open them I find green caterpillars inside.",
+    "images": [],
+    "expect": { "mustAskFollowUp": true }
+  },
+  {
+    "id": "typical-mosaic-virus-en",
+    "category": "typical",
+    "language": "English",
+    "symptoms": "The tomato leaves have a mottled light and dark green pattern and are twisted and small.",
+    "images": [],
+    "expect": { "mustAskFollowUp": true }
+  }
+]

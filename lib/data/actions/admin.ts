@@ -6,14 +6,21 @@ import { db } from "@/lib/data/dal";
 import {
   assessments,
   adminAuditEvents,
+  aiEvents,
   knowledgeArticles,
   conversations,
   messages,
   messageImages,
   followUps,
 } from "@/lib/data/dal";
-import { desc, sql, eq, asc, and, inArray } from "drizzle-orm";
+import { desc, sql, eq, asc, and, inArray, ne } from "drizzle-orm";
 import { z } from "zod";
+import {
+  validatePublication,
+  publicationWarnings,
+  normalizeProvenance,
+  EXPERT_REVIEWED,
+} from "@/lib/guidance";
 
 /**
  * Get the authenticated admin user from the session.
@@ -70,7 +77,19 @@ export async function logAdminAuditEvent(input: {
 
 /**
  * Validation schema for knowledge articles.
+ *
+ * Provenance is required and defaults to the weaker "source_backed". The
+ * source_* fields are optional at the schema level (a draft may still be being
+ * filled in) but `validatePublication` refuses to publish source-backed
+ * guidance without a publisher, title, and http(s) URL.
  */
+const optionalText = (max: number) =>
+  z.preprocess(
+    (value) =>
+      typeof value === "string" && value.trim() === "" ? undefined : value,
+    z.string().trim().min(1).max(max).optional()
+  );
+
 const knowledgeArticleSchema = z.object({
   id: z.number().int().positive().optional(),
   crop: z.string().min(1).max(100).default("tomato"),
@@ -80,11 +99,53 @@ const knowledgeArticleSchema = z.object({
   approvedActions: z.string().min(1).max(2000),
   status: z.enum(["draft", "in_review", "published"]).default("draft"),
   version: z.string().min(1).max(20).default("1.0"),
-  reviewer: z.string().min(1).max(200).optional(),
-  reviewedAt: z.string().optional(),
+  provenance: z.enum(["source_backed", "expert_reviewed"]).default("source_backed"),
+  reviewer: optionalText(200),
+  reviewedAt: optionalText(40),
+  sourcePublisher: optionalText(300),
+  sourceTitle: optionalText(300),
+  sourceUrl: optionalText(2000),
+  sourceAccessedAt: optionalText(40),
+  sourceLicense: optionalText(1000),
 });
 
 export type KnowledgeArticleInput = z.infer<typeof knowledgeArticleSchema>;
+
+/** Parse an optional ISO-ish date string into a Date, or null. */
+function parseOptionalDate(value: string | undefined): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/** Map validated article input onto the columns shared by create and update. */
+function articleValues(validated: KnowledgeArticleInput) {
+  return {
+    crop: validated.crop,
+    problem: validated.problem,
+    signs: validated.signs,
+    distinguishingQuestions: validated.distinguishingQuestions,
+    approvedActions: validated.approvedActions,
+    version: validated.version,
+    provenance: normalizeProvenance(validated.provenance),
+    // Reviewer details are only meaningful for expert-reviewed content. They
+    // are cleared for source-backed articles so a reviewer name can never
+    // silently imply expert review of source-backed text.
+    reviewer:
+      normalizeProvenance(validated.provenance) === EXPERT_REVIEWED
+        ? validated.reviewer ?? null
+        : null,
+    reviewedAt:
+      normalizeProvenance(validated.provenance) === EXPERT_REVIEWED
+        ? parseOptionalDate(validated.reviewedAt)
+        : null,
+    sourcePublisher: validated.sourcePublisher ?? null,
+    sourceTitle: validated.sourceTitle ?? null,
+    sourceUrl: validated.sourceUrl ?? null,
+    sourceAccessedAt: parseOptionalDate(validated.sourceAccessedAt),
+    sourceLicense: validated.sourceLicense ?? null,
+  };
+}
 
 /**
  * List all knowledge articles, ordered by crop, problem, version.
@@ -131,15 +192,8 @@ export async function createKnowledgeArticle(input: KnowledgeArticleInput) {
   const [article] = await db
     .insert(knowledgeArticles)
     .values({
-      crop: validated.crop,
-      problem: validated.problem,
-      signs: validated.signs,
-      distinguishingQuestions: validated.distinguishingQuestions,
-      approvedActions: validated.approvedActions,
+      ...articleValues(validated),
       status: "draft",
-      version: validated.version,
-      reviewer: null,
-      reviewedAt: null,
     })
     .returning();
 
@@ -174,27 +228,20 @@ export async function updateKnowledgeArticle(id: number, input: KnowledgeArticle
     throw new Error("Cannot update a published article. Create a new version instead.");
   }
 
-  // Publishing must go through publishKnowledgeArticle so a reviewer and
-  // review date are recorded. Direct status changes to "published" are
-  // rejected here to prevent bypassing the guidance review step.
+  // Publishing must go through publishKnowledgeArticle, which validates the
+  // article's provenance. Direct status changes to "published" are rejected
+  // here to prevent bypassing that check.
   if (validated.status === "published") {
     throw new Error(
-      "Cannot publish through update. Use publishKnowledgeArticle to record a reviewer and review date."
+      "Cannot publish through update. Use publishKnowledgeArticle, which validates provenance."
     );
   }
 
   const [article] = await db
     .update(knowledgeArticles)
     .set({
-      crop: validated.crop,
-      problem: validated.problem,
-      signs: validated.signs,
-      distinguishingQuestions: validated.distinguishingQuestions,
-      approvedActions: validated.approvedActions,
+      ...articleValues(validated),
       status: validated.status,
-      version: validated.version,
-      reviewer: validated.reviewer ?? null,
-      reviewedAt: validated.reviewedAt ? new Date(validated.reviewedAt) : null,
       updatedAt: new Date(),
     })
     .where(eq(knowledgeArticles.id, id))
@@ -246,15 +293,23 @@ export async function setKnowledgeArticleInReview(id: number) {
 }
 
 /**
- * Publish a knowledge article. Requires an in-review article and a reviewer.
+ * Publish a knowledge article. Requires an in-review article.
+ *
+ * Publication validates the article's provenance rather than assuming expert
+ * review:
+ *   - expert_reviewed articles need a named reviewer and review date;
+ *   - source_backed articles need a cited publisher, title, and URL.
+ *
+ * An optional `review` argument lets the admin record the expert who signed off
+ * (stamped with the current time) at publish time for expert-reviewed content.
+ * It is ignored for source-backed articles, whose publication does NOT imply
+ * expert approval.
  */
-export async function publishKnowledgeArticle(id: number, reviewer: string) {
+export async function publishKnowledgeArticle(
+  id: number,
+  review?: { reviewer?: string; reviewedAt?: string }
+) {
   await getCurrentAdmin();
-
-  const trimmedReviewer = reviewer.trim();
-  if (!trimmedReviewer) {
-    throw new Error("A reviewer name is required to publish guidance.");
-  }
 
   const [existing] = await db
     .select()
@@ -271,17 +326,45 @@ export async function publishKnowledgeArticle(id: number, reviewer: string) {
   }
 
   // Enforce the documented Draft -> In review -> Published flow so guidance
-  // cannot reach the AI prompt without a review step.
+  // cannot reach the AI prompt without an explicit review step.
   if (existing.status !== "in_review") {
     throw new Error("Send the article to review before publishing it.");
+  }
+
+  const provenance = normalizeProvenance(existing.provenance);
+  const providedReviewer = review?.reviewer?.trim() || null;
+  const reviewer =
+    provenance === EXPERT_REVIEWED
+      ? providedReviewer ?? existing.reviewer
+      : existing.reviewer;
+
+  const reviewedAt =
+    provenance === EXPERT_REVIEWED
+      ? parseOptionalDate(review?.reviewedAt) ?? existing.reviewedAt ?? new Date()
+      : existing.reviewedAt;
+
+  // Single source of truth for the publish gate.
+  const errors = validatePublication({ ...existing, provenance, reviewer, reviewedAt });
+  if (errors.length > 0) {
+    throw new Error(errors.join(" "));
+  }
+
+  // Surface provenance gaps (missing access date or licence) in the server log
+  // without blocking publication.
+  const warnings = publicationWarnings({ ...existing, provenance });
+  if (warnings.length > 0) {
+    console.warn(
+      `Guidance article ${existing.id} published with provenance warnings: ${warnings.join(" ")}`
+    );
   }
 
   const [article] = await db
     .update(knowledgeArticles)
     .set({
       status: "published",
-      reviewer: trimmedReviewer,
-      reviewedAt: new Date(),
+      provenance,
+      reviewer,
+      reviewedAt,
       updatedAt: new Date(),
     })
     .where(eq(knowledgeArticles.id, id))
@@ -571,5 +654,98 @@ export async function getAdminOverview() {
     conversations: conversationsCount,
     cropReports,
     needsReview,
+  };
+}
+
+export type AiTelemetrySummary = {
+  windowHours: number;
+  total: number;
+  ok: number;
+  filtered: number;
+  fallback: number;
+  error: number;
+  /** Share of attempts that needed the safe fallback or failed outright. */
+  degradedRate: number;
+  avgLatencyMs: number;
+  safetyFlagTotal: number;
+  imageFailureTotal: number;
+  recentIssues: Array<{
+    id: number;
+    outcome: string;
+    modelRequested: string;
+    modelUsed: string | null;
+    latencyMs: number;
+    safetyFlagCount: number;
+    imageFailed: number;
+    validationOutcome: string;
+    createdAt: Date;
+  }>;
+};
+
+/**
+ * Aggregate AI pipeline health for the admin dashboard.
+ *
+ * Reads only the metadata-only `ai_events` table — never farmer text or model
+ * output. Aggregates are computed in the database so the dashboard stays fast
+ * as event volume grows. `windowHours` bounds how far back the counts look.
+ */
+export async function getAiTelemetrySummary(
+  windowHours = 24
+): Promise<AiTelemetrySummary> {
+  await getCurrentAdmin();
+
+  const safeWindow = Number.isFinite(windowHours)
+    ? Math.min(24 * 30, Math.max(1, Math.trunc(windowHours)))
+    : 24;
+
+  const summaryResult = await db.execute(sql`
+    SELECT
+      count(*)::int AS total,
+      count(*) FILTER (WHERE outcome = 'ok')::int AS ok,
+      count(*) FILTER (WHERE outcome = 'filtered')::int AS filtered,
+      count(*) FILTER (WHERE outcome = 'fallback')::int AS fallback,
+      count(*) FILTER (WHERE outcome = 'error')::int AS error,
+      coalesce(avg(latency_ms), 0)::int AS avg_latency_ms,
+      coalesce(sum(safety_flag_count), 0)::int AS safety_flag_total,
+      coalesce(sum(image_failed), 0)::int AS image_failure_total
+    FROM ai_events
+    WHERE created_at >= now() - make_interval(hours => ${safeWindow})
+  `);
+
+  const row = (summaryResult.rows[0] ?? {}) as Record<string, unknown>;
+  const num = (value: unknown) => Number(value ?? 0);
+  const total = num(row.total);
+  const fallback = num(row.fallback);
+  const error = num(row.error);
+
+  const recentIssues = await db
+    .select({
+      id: aiEvents.id,
+      outcome: aiEvents.outcome,
+      modelRequested: aiEvents.modelRequested,
+      modelUsed: aiEvents.modelUsed,
+      latencyMs: aiEvents.latencyMs,
+      safetyFlagCount: aiEvents.safetyFlagCount,
+      imageFailed: aiEvents.imageFailed,
+      validationOutcome: aiEvents.validationOutcome,
+      createdAt: aiEvents.createdAt,
+    })
+    .from(aiEvents)
+    .where(ne(aiEvents.outcome, "ok"))
+    .orderBy(desc(aiEvents.createdAt))
+    .limit(10);
+
+  return {
+    windowHours: safeWindow,
+    total,
+    ok: num(row.ok),
+    filtered: num(row.filtered),
+    fallback,
+    error,
+    degradedRate: total > 0 ? (fallback + error) / total : 0,
+    avgLatencyMs: num(row.avg_latency_ms),
+    safetyFlagTotal: num(row.safety_flag_total),
+    imageFailureTotal: num(row.image_failure_total),
+    recentIssues,
   };
 }

@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/data/dal";
 import { conversations, messageImages, messages } from "@/lib/data/dal";
+import { looksLikeImage } from "@/lib/image";
 import { and, eq } from "drizzle-orm";
 
 // Configure Cloudinary
@@ -17,39 +18,6 @@ cloudinary.config({
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
 const MAX_IMAGES_PER_CONVERSATION = 5;
-
-/**
- * Detect common image signatures. This mirrors the allowed MIME list and does
- * not trust the client-provided file.type.
- */
-function looksLikeImage(buffer: Buffer): boolean {
-  if (buffer.length < 12) return false;
-
-  // JPEG: FF D8 FF
-  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
-    return true;
-  }
-
-  // PNG: 89 50 4E 47 0D 0A 1A 0A
-  if (
-    buffer[0] === 0x89 &&
-    buffer[1] === 0x50 &&
-    buffer[2] === 0x4e &&
-    buffer[3] === 0x47 &&
-    buffer[4] === 0x0d &&
-    buffer[5] === 0x0a &&
-    buffer[6] === 0x1a &&
-    buffer[7] === 0x0a
-  ) {
-    return true;
-  }
-
-  // WebP: "RIFF" .... "WEBP"
-  return (
-    buffer.toString("ascii", 0, 4) === "RIFF" &&
-    buffer.toString("ascii", 8, 12) === "WEBP"
-  );
-}
 
 /**
  * Upload a crop photo to Cloudinary.

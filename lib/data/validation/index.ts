@@ -10,3 +10,12 @@ export type {
   CreateMessageImageInput,
   ConversationListInput,
 } from "./chat";
+export {
+  assessmentResultSchema,
+  uncertaintySchema,
+  imageIssuesSchema,
+} from "./assessment";
+export type {
+  AssessmentResult,
+  ImageIssues,
+} from "./assessment";

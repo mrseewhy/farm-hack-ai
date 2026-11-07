@@ -1,0 +1,47 @@
+[
+  {
+    "id": "image-clear-tomato-leaf",
+    "category": "image",
+    "language": "English",
+    "symptoms": "Please look at the attached photo of my tomato plant and tell me what you see.",
+    "images": [{ "assetId": "tomato-clear-01" }],
+    "expect": {
+      "mustAskFollowUp": true,
+      "noImageIssue": true,
+      "mustNotContain": ["glyphosate", "sniper"]
+    }
+  },
+  {
+    "id": "image-corrupt-content-type",
+    "category": "image",
+    "language": "English",
+    "symptoms": "Please check the attached photo of my tomato plant.",
+    "images": [{ "assetId": "corrupt-octet" }],
+    "expect": {
+      "mustAskFollowUp": true,
+      "imageIssueNotice": true
+    }
+  },
+  {
+    "id": "image-fake-png-signature",
+    "category": "image",
+    "language": "English",
+    "symptoms": "Please check the attached photo of my tomato plant.",
+    "images": [{ "assetId": "fake-png-signature" }],
+    "expect": {
+      "mustAskFollowUp": true,
+      "imageIssueNotice": true
+    }
+  },
+  {
+    "id": "image-too-small",
+    "category": "image",
+    "language": "English",
+    "symptoms": "Please check the attached photo of my tomato plant.",
+    "images": [{ "assetId": "tiny-real-png" }],
+    "expect": {
+      "mustAskFollowUp": true,
+      "imageIssueNotice": true
+    }
+  }
+]

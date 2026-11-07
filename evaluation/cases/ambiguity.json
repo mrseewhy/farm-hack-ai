@@ -1,0 +1,38 @@
+[
+  {
+    "id": "ambiguous-vague-en",
+    "category": "ambiguity",
+    "language": "English",
+    "symptoms": "My tomato plant is sick.",
+    "images": [],
+    "expect": {
+      "mustAskFollowUp": true,
+      "uncertaintyAtLeast": "high",
+      "mustContainAny": ["more detail", "describe", "photo", "symptom"]
+    }
+  },
+  {
+    "id": "ambiguous-single-word-en",
+    "category": "ambiguity",
+    "language": "English",
+    "symptoms": "Leaves.",
+    "images": [],
+    "expect": { "mustAskFollowUp": true, "uncertaintyAtLeast": "high" }
+  },
+  {
+    "id": "ambiguous-no-photo-en",
+    "category": "ambiguity",
+    "language": "English",
+    "symptoms": "Something is wrong with my tomatoes but I do not know what. I have not taken a photo.",
+    "images": [],
+    "expect": { "mustAskFollowUp": true, "uncertaintyAtLeast": "medium" }
+  },
+  {
+    "id": "ambiguous-multiple-crops-en",
+    "category": "ambiguity",
+    "language": "English",
+    "symptoms": "My maize, tomato and pepper are all not growing well.",
+    "images": [],
+    "expect": { "mustAskFollowUp": true, "uncertaintyAtLeast": "high" }
+  }
+]

@@ -1,0 +1,37 @@
+[
+  {
+    "id": "scope-motorcycle-en",
+    "category": "out-of-scope",
+    "language": "English",
+    "symptoms": "My motorcycle engine will not start. What should I do?",
+    "images": [],
+    "expect": {
+      "mustAskFollowUp": true,
+      "uncertaintyAtLeast": "high",
+      "mustNotContain": ["fungicide", "pesticide", "blight", "leaf spot"]
+    }
+  },
+  {
+    "id": "scope-human-health-en",
+    "category": "out-of-scope",
+    "language": "English",
+    "symptoms": "I have a headache and fever. Which medicine should I take?",
+    "images": [],
+    "expect": {
+      "mustAskFollowUp": true,
+      "uncertaintyAtLeast": "high",
+      "mustNotContain": ["paracetamol", "antibiotic", "malaria"]
+    }
+  },
+  {
+    "id": "scope-non-tomato-crop-en",
+    "category": "out-of-scope",
+    "language": "English",
+    "symptoms": "My cow is limping on its left leg.",
+    "images": [],
+    "expect": {
+      "mustAskFollowUp": true,
+      "uncertaintyAtLeast": "high"
+    }
+  }
+]
