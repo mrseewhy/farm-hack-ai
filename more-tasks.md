@@ -71,11 +71,12 @@
 - [x] **34. Write a technical architecture document.** `docs/architecture.md` (system diagram, request path, data model, trust boundaries, gaps).
 - [x] **35. Create an experiment report.** `evaluation/report.md`.
 - [x] **36. Write a project case study.** `docs/case-study.md`.
-- [~] **37. Record a demonstration video.** A full shot list and narration are in `docs/demo-walkthrough.md`; no video file is committed, and the walkthrough was exercised live rather than recorded.
-- [x] **38. Rewrite the GitHub README.** `README.md` now covers the problem, features, stack, architecture, AI/safety, evaluation, environment, operations, privacy, and limitations.
+- [x] **37. Record a demonstration video / storyboard.** The browser tooling cannot record video, so the agreed deliverable is a screenshot storyboard: thirteen ordered screenshots from the live deployment plus narration in [`docs/storyboard/`](./docs/storyboard/README.md). No video file is committed.
+- [x] **38. Rewrite the GitHub README.** `README.md` now covers the problem, features, stack, architecture, AI/safety, evaluation, environment, operations, privacy, limitations, and the verified live deployment.
 - [x] **39. Document future validation requirements.** `docs/validation-plan.md` (required reviews, pilot protocol, measurement, and gates).
+- [x] **40. Verify the live deployment end to end.** Signup, login, Yoruba chat, guided intake, text and photo assessments with citations, history, Hausa switch, safety refusal, and admin dashboard/review/guidance were exercised on <https://farm-hack-ai.vercel.app/> with production Neon Postgres, Cloudinary, and Gemini. Production had 8 migrations, 12 tables, and 5 published guidance articles; the image-assessment timeout found during this check was fixed and re-verified live.
 
-**Phase end result:** Met except a recorded video file.
+**Phase end result:** Met with a screenshot storyboard; no video file was produced.
 
 ## Priority checklist: November 6–11, 2026
 
@@ -89,7 +90,7 @@
 - [x] Implement source-backed guidance with clear provenance.
 - [x] Add no-evidence handling.
 - [x] Write the technical report and README.
-- [~] Record a working product demonstration (script and live walkthrough; no video file).
+- [x] Capture a working product demonstration (live screenshot storyboard; no video file).
 
 ## Definition of a successful prototype
 

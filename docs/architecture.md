@@ -9,7 +9,9 @@ This document explains how a farmer's message becomes a cautious, structured cro
 - **Grounded** in traceable public guidance rather than unverifiable model memory.
 - **Honest**: no claim of agricultural accuracy; everything measurable is measured, everything unknown is documented.
 
-Nothing here is deployed or validated for real-world field use. The design targets a credible, testable prototype.
+The prototype is deployed at <https://farm-hack-ai.vercel.app/> (Vercel + production
+Neon Postgres + Cloudinary + Gemini), but it is not validated for real-world field use.
+The design targets a credible, testable prototype.
 
 ## System diagram
 
@@ -55,7 +57,7 @@ flowchart TB
 3. **Ownership scoping.** Every conversation, message, assessment, and follow-up query is filtered by `conversations.userId = session.user.id`, so one farmer cannot read or mutate another's data. Admin-only actions call `getCurrentAdmin()`, which throws unless `role === "admin"`.
 4. **Photo upload.** `uploadCropImage` validates MIME type and size, then verifies the **file signature** (`looksLikeImage`) so a renamed non-image cannot reach Cloudinary. It confirms conversation ownership and that the target message belongs to that conversation *before* uploading, so a failed access check cannot leave an orphaned file. If binding the upload to the database fails, the Cloudinary asset is deleted.
 5. **Evidence assembly.** Text and image URLs are read from the stored message and its attachments, not from the request body. Unreachable or unusable images are dropped and counted.
-6. **Model call.** `assessCropHealth` builds a prompt that includes the crop-scoped guidance block, sends the text and inline images to Gemini, and requests a JSON object matching the assessment schema. If the primary model is overloaded or out of quota, `GEMINI_FALLBACK_MODELS` are tried in order.
+6. **Model call.** `assessCropHealth` builds a prompt that includes the crop-scoped guidance block, sends the text and inline images to Gemini, and requests a JSON object matching the assessment schema. If the primary model is overloaded or out of quota, `GEMINI_FALLBACK_MODELS` are tried in order. Text turns allow 20 s per attempt inside a 45 s total budget; image turns allow 30 s per attempt inside a 55 s total budget, because the full image prompt is materially slower. The capped budget keeps a slow provider from holding the chat open indefinitely.
 7. **Validation.** The response is parsed with Zod. On failure, one repair attempt is made with the validation errors attached; if that also fails, the request fails closed to a safe fallback and is recorded as `validation_outcome = invalid`, `outcome = fallback`.
 8. **Safety audit.** `lib/safety.ts` removes or refuses restricted content (pesticide names, dosages, definite-diagnosis language) in all four languages, forcing escalation where required. The post-filter output is audited again so the filter cannot reintroduce unsafe text.
 9. **Evidence policy.** `applyEvidencePolicy` enforces the no-evidence rules: no text and no image → safe fallback; no findings → high uncertainty plus escalation; empty follow-up list → a clarifying question is added.

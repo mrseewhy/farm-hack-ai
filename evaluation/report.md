@@ -301,6 +301,39 @@ attached only when the run did not fall back to the safe default. The chat UI
 labels each entry "Source-backed (not expert-reviewed)" or names the expert
 reviewer, so publishing never implies review. This closes roadmap item 19.
 
+## Live deployment verification
+
+On **2026-11-07** the deployed application at
+<https://farm-hack-ai.vercel.app/> was exercised against production Neon Postgres,
+production Cloudinary, and live Gemini. This is a deployment check, not an additional
+evaluation run.
+
+- Signup, login, Yoruba interface, guided intake, text assessment, photo upload, image
+  assessment, conversation history, a Hausa language switch, a safety refusal, and the
+  admin dashboard/review/guidance pages all worked.
+- The production database had **8** Drizzle migrations, **12** application tables, and
+  **5** published source-backed guidance articles.
+- Final checks: TypeScript and ESLint clean, production build succeeds, **90/90** unit
+  tests, **2/2** database integration tests.
+- The real Cloudinary upload was assessed successfully: `ai_events` event `23`,
+  `gemini-3.5-flash-lite`, `latency_ms=4494`, `image_total=1`, `image_failed=0`,
+  `validation_outcome=valid`, `outcome=ok`.
+
+### Finding 12 — live image assessments timed out, and the budget was fixed
+
+The first two live image assessments (events `21` and `22`) ended in `outcome=error`
+after three fallback attempts. Reproducing the exact application path against the stored
+conversation showed why: the full prompt (image bytes + guidance + history) took about
+**17.7 s** on `gemini-3.5-flash-lite`, just under the old 20 s per-attempt limit, while
+the next candidate returned a 503. There was no headroom for normal latency variation.
+
+- **Fix:** image turns now allow **30 s per attempt inside a 55 s total budget**; text
+  turns keep 20 s per attempt inside a 45 s budget (`lib/ai.ts`).
+- **Verification:** the same path then succeeded locally in 17.7 s and, after redeploy,
+  on the live deployment in 4.5 s (`outcome=ok`, `image_failed=0`).
+- The two pre-fix failures remain in `ai_events`; they were not deleted, so the admin
+  dashboard shows the real before/after history.
+
 ## What this run does not establish
 
 - It does **not** show the system diagnoses tomato diseases correctly.

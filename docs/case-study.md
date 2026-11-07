@@ -47,6 +47,8 @@ The full write-up is in [`../evaluation/report.md`](../evaluation/report.md). Hi
 - **Image handling is evaluated end to end**: a licensed CC0 photo, a documented blurred derivative, three invalid payloads rejected before analysis, and a deterministic fetch-failure fixture.
 - **Two real bugs were found and fixed** by the evaluation itself: a safety suffix whose digit caused non-English answers to collapse to English, and a Yoruba pattern that treated a statement of uncertainty as a definite diagnosis.
 - **A farmer-journey test found a third bug**: the outcome-feedback form sent `yes`/`no` while the server expected `helped`/`not_helped`, so every submission failed validation. The mapping is now a tested pure function.
+- **A live deployment check found a fourth bug**: real image assessments failed under the original 20 s per-attempt timeout because the full image + guidance + history prompt left no headroom, and the next candidate returned a 503. Image turns now use 30 s per attempt inside a 55 s total budget. The same path then succeeded on the live deployment (4.5 s, `outcome=ok`, `image_failed=0`).
+- **Live verification (2026-11-07)**: signup, login, Yoruba chat, text and photo assessments, citations, history persistence, a Hausa language switch, a safety refusal, and the admin dashboard/review/guidance pages were exercised on the Vercel deployment with production Neon Postgres, Cloudinary, and Gemini. The ordered screenshots are in [`storyboard/`](storyboard/README.md).
 
 These are **technical and safety results**, not accuracy results. A case "passing" means the pipeline met its structural and safety contract, not that the agricultural advice was correct or locally appropriate.
 
@@ -58,7 +60,7 @@ This is a **tested prototype**, not a validated product. The work distinguishes 
 | --- | --- |
 | The pipeline is structured, safe-by-contract, observable, and reproducible on synthetic inputs. | Supported by tests and recorded runs. |
 | The advice is agronomically correct or locally appropriate. | **Not established.** No expert, no labelled dataset. |
-| The interface is usable and consistent in four languages. | Verified in a local farmer-journey test; wording still needs native-speaker review. |
+| The interface is usable and consistent in four languages. | Verified live on the Vercel deployment; wording still needs native-speaker review. |
 
 ## What a reviewer should take from this
 

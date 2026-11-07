@@ -2,11 +2,18 @@
 
 A ~6-minute script that shows the farmer journey, the safety behaviour, image handling, and the admin view. It is written so a live demo is repeatable and honest about what is and is not being shown.
 
-> **Recording note.** No video file is committed to this repository. This is the shot list and narration. Every step below was exercised against a local build with an isolated PostgreSQL instance and intentionally invalid Cloudinary credentials (to prove the failure path).
+> **Recording note.** No video file is committed to this repository. The recorded
+> demonstration is the ordered screenshot storyboard in
+> [`docs/storyboard/`](storyboard/README.md), captured from the live Vercel deployment on
+> 2026-11-07 with production Neon Postgres, Cloudinary, and Gemini. This file remains the
+> narration and repeatable shot list. The invalid-Cloudinary failure path in Shot 5 was
+> exercised separately on a local build with deliberately invalid credentials; the live
+> deployment uses the real Cloudinary account.
 
 ## Preparation
 
-- Local PostgreSQL running and migrated; `npm run db:seed:guidance -- --publish` has seeded the guidance.
+- Live deployment: <https://farm-hack-ai.vercel.app/> with production environment variables.
+- For a local rebuild: PostgreSQL running and migrated; `npm run db:seed:guidance -- --publish` has seeded the guidance.
 - `GEMINI_MODEL=gemini-3.5-flash-lite` (the fully recorded evaluation model).
 - A test farmer account and an admin account (provisioned with `npm run auth:provision-admin`).
 - Have `npm run eval:replay` ready as the offline fallback if the network is unavailable.

@@ -1,6 +1,6 @@
 # FarmHack AI
 
-FarmHack AI is a multilingual crop-diagnosis assistant for smallholder farmers in Nigeria. A farmer describes a problem with their **tomato** crop in English, Yoruba, Hausa, or Igbo, optionally attaches a leaf photo, and receives a structured, cautious preliminary assessment: observed signs, possible causes, questions to check, suggested actions, when to seek local help, and an explicit uncertainty level.
+FarmHack AI is a multilingual crop-guidance assistant for smallholder farmers in Nigeria. A farmer describes a problem with their **tomato** crop in English, Yoruba, Hausa, or Igbo, optionally attaches a leaf photo, and receives a structured, cautious preliminary assessment: observed signs, possible causes, questions to check, suggested actions, when to seek local help, and an explicit uncertainty level.
 
 The project is deliberately framed as **preliminary AI guidance, not a confirmed diagnosis**. No agricultural expert or expert-labelled dataset was available, so the emphasis is on responsible AI engineering: structured outputs, multilanguage safety filtering, traceable public guidance, reproducible evaluation, and honest limitations.
 
@@ -12,6 +12,27 @@ The project is deliberately framed as **preliminary AI guidance, not a confirmed
 - **Evaluation harness** (`evaluation/`) — 38 synthetic cases (text + image) and a replay/record runner that produces reproducible JSON results.
 
 See the roadmap and per-item evidence in [`more-tasks.md`](./more-tasks.md) and the evaluation write-up in [`evaluation/report.md`](./evaluation/report.md).
+
+## Live deployment
+
+The prototype is deployed at **<https://farm-hack-ai.vercel.app/>** (Vercel, production
+Neon Postgres, production Cloudinary, live Gemini). It was verified end to end on
+**2026-11-07**:
+
+- Signup, login, language selection, chat, photo upload, text assessment, image
+  assessment, conversation history, and the admin dashboard/review/guidance pages.
+- The farmer journey was exercised in Yoruba, then switched to Hausa while the stored
+  Yoruba conversation kept its original language.
+- A real tomato photo was uploaded to Cloudinary and assessed successfully
+  (`gemini-3.5-flash-lite`, `outcome=ok`, `image_total=1`, `image_failed=0`).
+- Production database: 8 Drizzle migrations, all 12 application tables, and 5 published
+  source-backed guidance articles.
+- Final checks: TypeScript, ESLint, production build, **90/90** unit tests, and **2/2**
+  database integration tests.
+
+The ordered screenshot storyboard is in [`docs/storyboard/`](./docs/storyboard/README.md).
+It records the live deployment, including the two pre-fix image-assessment failures that
+remain visible in admin telemetry.
 
 ## Tech stack
 
