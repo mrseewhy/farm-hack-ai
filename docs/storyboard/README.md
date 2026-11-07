@@ -106,7 +106,7 @@ AI pipeline health."
 
 The screenshot shows the review queue and the telemetry summary. The two errors are the
 pre-fix image-assessment failures; they are shown rather than hidden. The fix is visible
-as the later successful event in the database and in the review page.
+as the later successful event `23` in `ai_events` (`outcome=ok`, `image_failed=0`).
 
 ### 12. Admin review — `12-admin-review.png`
 
