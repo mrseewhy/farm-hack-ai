@@ -1,16 +1,16 @@
 # Evaluation report — safety, behaviour, and image handling
 
-**Date:** 2026-11-07 (image cases and two-configuration comparison added)
+**Date:** 2026-11-07 (full 38-case two-configuration comparison)
 **Primary model:** `gemini-3.5-flash-lite` — all 38 executed cases
-**Comparison model:** `gemini-3.1-flash-lite` — same 17 safety, ambiguity, and image cases
+**Comparison model:** `gemini-3.1-flash-lite` — all 38 executed cases
 **Cases defined:** 38
 **Cases recorded and executed:** 38
 **Cases skipped:** 0
 
 Latest machine-readable runs:
 
-- `evaluation/runs/2026-11-07T01-29-09-960Z-replay-default.json` — 38/38
-- `evaluation/runs/2026-11-07T01-29-16-476Z-replay-lite31.json` — 17/17
+- `evaluation/runs/2026-11-07T02-04-38-216Z-replay-default.json` — 38/38
+- `evaluation/runs/2026-11-07T02-04-38-802Z-replay-lite31.json` — 38/38
 
 > **Scope warning.** These results measure **safety behaviour, output structure,
 > uncertainty handling, and image-failure handling** on synthetic inputs. They do
@@ -129,43 +129,36 @@ were all rejected inside `imageToInlineData` before model analysis, and each set
 
 ## Two-configuration comparison
 
-Task 13 asks for two model configurations on the same scenarios. A **full**
-second run was not possible because of Gemini free-tier quotas:
+Task 13 asks for two model configurations on the same scenarios. Both
+configurations were run on **all 38 cases**:
 
-- `gemini-3.6-flash` returned **429 Too Many Requests** on the first probe.
-- `gemini-3.8-flash` also failed and fell back; the probe eventually completed
-  only through `gemini-3.5-flash-lite`.
-- `gemini-3.1-flash-lite` was available, so it was used for the comparison.
-
-To stay inside the roughly 20-requests-per-day-per-model free tier, the
-comparison used the **same 17 cases** that matter most for safety and image
-behaviour: all 7 safety cases, all 4 ambiguity cases, and all 6 image cases.
-Both configurations were scored with the same rubric and the same cached-input
-pipeline.
-
-| Configuration | Cases executed | Passed | Failed | Uncertainty on the 17-case subset |
+| Configuration | Cases executed | Passed | Failed | Uncertainty distribution |
 |---|---|---|---|---|
-| `gemini-3.5-flash-lite` | 17 (of the full 38) | 17 | 0 | 16 high, 1 medium |
-| `gemini-3.1-flash-lite` | 17 | 17 | 0 | 16 high, 1 medium |
+| `gemini-3.5-flash-lite` | 38 | 38 | 0 | 31 high, 6 medium, 1 low |
+| `gemini-3.1-flash-lite` | 38 | 38 | 0 | 30 high, 8 medium, 0 low |
 
 Findings from the comparison:
 
-- **No difference in pass/fail or uncertainty level** on the 17 shared cases.
-- **None of the 17 assessment objects were textually identical.** The two models
-  phrased observations, causes, and actions differently while staying inside the
-  same safety and format contract.
-- The response text was slightly longer on average for `gemini-3.1-flash-lite`
-  (about 1,118 characters of JSON versus 1,008 for the same cases on
-  `gemini-3.5-flash-lite`), which is a rough size signal only, not a quality
-  measure.
+- **Same pass rate.** Both configurations pass every deterministic check on all
+  38 cases.
+- **No identical assessments.** 0 of 38 assessment objects were byte-identical;
+  the models phrase observations, causes, and actions differently while staying
+  inside the same safety and format contract.
+- **Uncertainty agrees on 36 of 38 cases.** The two differences are
+  `typical-nutrient-deficiency-en` (high vs medium) and `typical-fruitworm-en`
+  (low vs medium). In both, the `gemini-3.5-flash-lite` run is the more
+  conservative one.
+- **Response size is similar.** The average assessment JSON is about 1,008
+  characters on `gemini-3.5-flash-lite` and 1,197 on `gemini-3.1-flash-lite`;
+  size is a rough signal only, not a quality measure.
 - This is **not** evidence that one model gives better agricultural advice. It
-  only shows that both configurations passed the same deterministic safety and
-  structure checks on this subset.
+  only shows that both configurations pass the same deterministic safety and
+  structure checks. There is still no expert-labelled ground truth.
 
-The remaining 21 cases (typical, cross-language, diagnosis-bait, out-of-scope)
-were recorded under the primary model only. A full 38-case comparison should be
-rerun when quota or billing allows, and the result should still be described as
-technical behaviour, not diagnostic accuracy.
+Both caches now contain a single model per configuration, so the replay is
+clean: `evaluation/cache/default.json` is entirely `gemini-3.5-flash-lite` and
+`evaluation/cache/lite31.json` is entirely `gemini-3.1-flash-lite`. The earlier
+mixed-model cache remains at `evaluation/cache/default-mixed-2026-11-06.json`.
 
 ## Findings
 
@@ -292,12 +285,21 @@ limitation is now **coverage, not plumbing**: one photo (plus one blur
 derivative) is not a test set for disease recognition, and the photographer's
 caption is not expert ground truth.
 
-### 10. The model comparison is partial by necessity
+### 10. The model comparison now covers all 38 cases
 
-The comparison in this report covers 17 of 38 cases because free-tier quota
-blocked the larger models. This is enough to show the harness can compare
-configurations, but not enough to rank models. It should be described as a
-**17-case configuration check**, not a benchmark.
+Both configurations were run on the full 38-case set once the per-minute
+free-tier limit cleared. This remains a **configuration check, not a
+benchmark**: it shows both models satisfy the same deterministic checks, not
+which gives better agricultural advice.
+
+### 11. Farmer-facing guidance citations are server-owned
+
+Assessments now carry a `citations` array built from the same curated guidance
+that was supplied to the model (`buildGuidanceCitations` in `lib/guidance.ts`).
+The values come from the reference record, never from model text, and are
+attached only when the run did not fall back to the safe default. The chat UI
+labels each entry "Source-backed (not expert-reviewed)" or names the expert
+reviewer, so publishing never implies review. This closes roadmap item 19.
 
 ## What this run does not establish
 
@@ -307,8 +309,8 @@ configurations, but not enough to rank models. It should be described as a
 - It does **not** establish image-based diagnostic performance. One licensed
   photo and one blur derivative can test pipeline behaviour, not recognition
   quality.
-- It is **not** a full two-configuration comparison (Task 13): 17 shared cases
-  were compared, and the remaining 21 were recorded under one model only.
+- It does **not** show that either compared model gives better agricultural
+  advice. Both pass the same deterministic checks; no accuracy claim follows.
 - A 38/38 pass rate is **not** a quality score. The cases are synthetic, and the
   deterministic safety layer is designed to make these checks pass.
 
@@ -321,12 +323,10 @@ npm run eval:replay                   # offline, no model calls
 npm run test:eval
 ```
 
-For the comparison subset (requires quota on the second model):
+For the full two-configuration comparison (requires quota on the second model):
 
 ```bash
-GEMINI_MODEL=gemini-3.1-flash-lite npm run eval:record -- --config lite31 --filter safety
-GEMINI_MODEL=gemini-3.1-flash-lite npm run eval:record -- --config lite31 --filter ambiguous
-GEMINI_MODEL=gemini-3.1-flash-lite npm run eval:record -- --config lite31 --filter image
+GEMINI_MODEL=gemini-3.1-flash-lite npm run eval:record -- --config lite31 --skip-cached
 GEMINI_MODEL=gemini-3.1-flash-lite npm run eval:replay -- --config lite31
 ```
 
@@ -338,9 +338,9 @@ GEMINI_MODEL=gemini-3.1-flash-lite npm run eval:replay -- --config lite31
 2. ~~Record all cases under a single model once quota allows~~ **Done
    (2026-11-07).** All 38 executed cases are recorded under
    `gemini-3.5-flash-lite`.
-3. ~~Compare two configurations~~ **Partially done.** 17 shared cases compared
-   against `gemini-3.1-flash-lite`; 3.6 and 3.8 were quota-blocked. Rerun the
-   full 38-case comparison when quota or billing allows.
+3. ~~Compare two configurations~~ **Done (2026-11-07).** All 38 cases were
+   recorded and replayed under both `gemini-3.5-flash-lite` and
+   `gemini-3.1-flash-lite`; both pass 38/38.
 4. Write cross-language review notes and have a native speaker check the draft
    term lists.
 5. Turn the recurring findings into production safeguards where possible.

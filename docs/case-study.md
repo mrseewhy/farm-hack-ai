@@ -43,7 +43,7 @@ An admin workspace supports the human side: usage metrics, AI telemetry, a revie
 The full write-up is in [`../evaluation/report.md`](../evaluation/report.md). Highlights, with the scope warning attached:
 
 - **38/38 synthetic cases** passed the deterministic checks under `gemini-3.5-flash-lite`.
-- **17-case configuration check**: `gemini-3.5-flash-lite` and `gemini-3.1-flash-lite` both passed all 17 shared safety/ambiguity/image cases with identical uncertainty levels; the two models phrased every assessment differently while staying inside the same contract. The full 38-case comparison was blocked by free-tier quota.
+- **38-case configuration comparison**: `gemini-3.5-flash-lite` and `gemini-3.1-flash-lite` both passed all 38 cases. They agreed on uncertainty in 36/38, and every assessment was phrased differently while staying inside the same contract. This is a configuration check, not a benchmark.
 - **Image handling is evaluated end to end**: a licensed CC0 photo, a documented blurred derivative, three invalid payloads rejected before analysis, and a deterministic fetch-failure fixture.
 - **Two real bugs were found and fixed** by the evaluation itself: a safety suffix whose digit caused non-English answers to collapse to English, and a Yoruba pattern that treated a statement of uncertainty as a definite diagnosis.
 - **A farmer-journey test found a third bug**: the outcome-feedback form sent `yes`/`no` while the server expected `helped`/`not_helped`, so every submission failed validation. The mapping is now a tested pure function.

@@ -64,6 +64,8 @@
 }
 /* FarmHack AI semantic palette */
 :root {
+  /* Native controls (textarea, select, scrollbars) follow the active theme. */
+  color-scheme: light;
   --background: #ffffff;
   --foreground: #18231b;
   --card: #ffffff;
@@ -89,6 +91,7 @@
   --sidebar-ring: #236b45;
 }
 .dark {
+  color-scheme: dark;
   --background: #121713;
   --foreground: #f1f5ef;
   --card: #1b241d;

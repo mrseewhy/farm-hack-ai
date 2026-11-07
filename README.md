@@ -45,7 +45,7 @@ Open <http://localhost:3000>. `/` redirects by session role.
 | `npm run dev` | Start the dev server |
 | `npm run build` | Production build |
 | `npm run lint` | ESLint |
-| `npm test` | Safety, monitoring, guidance, rate-limit, follow-up, and eval-scoring tests |
+| `npm test` | Safety, monitoring, guidance, rate-limit, follow-up, reminders, error-sanitization, and eval-scoring tests |
 | `npm run test:integration` | Opt-in PostgreSQL integration tests (set `RUN_DB_INTEGRATION=1`; all rows rolled back) |
 | `npm run eval:validate` | Validate evaluation case files and fixtures |
 | `npm run eval:replay` | Replay the recorded evaluation results and check them against current scoring rules |
@@ -107,6 +107,7 @@ Never commit `.env`. Required unless noted.
 | `GEMINI_MODEL` | Primary model id; defaults to `gemini-3.8-flash` | No |
 | `GEMINI_FALLBACK_MODELS` | Comma-separated fallbacks tried in order on overload/quota; defaults to `gemini-3.6-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite` | No |
 | `AI_MAX_ASSESSMENTS_PER_DAY` | Rolling per-user assessment cap; defaults to `20`, clamped to `[1, 500]` | No |
+| `AI_FOLLOW_UP_REMINDER_HOURS` | Hours before an assessment becomes a follow-up reminder; defaults to `48`, clamped to `[1, 720]` | No |
 | `RESEND_API_KEY` | Resend API key for email verification | No (disabled) |
 | `EMAIL_FROM` | From address for emails | No (disabled) |
 
@@ -172,9 +173,10 @@ Email verification is temporarily disabled: new accounts can sign up and sign in
 - **No agricultural expert or validated dataset.** Assessments are preliminary and unverified; use them only as decision support.
 - **Tomato only.** Other crops are intentionally unsupported until validated.
 - **Synthetic evaluation.** Tests measure technical behaviour and safety rules, not diagnostic accuracy.
-- **Sources are not yet cited in the farmer UI.** Guidance URLs are given to the model in the prompt but are not rendered as a citation block in the response.
-- **Guided symptom collection and follow-up reminders are basic.** The assistant asks follow-up questions and records outcome feedback, but there is no dedicated intake wizard or scheduled reminder.
-- **Mobile performance is not benchmarked** on low-end devices or throttled networks.
+- **Citations are source-backed, not expert-reviewed.** Each assessment lists the guidance it used, with a real URL and provenance. No article has been expert-reviewed yet.
+- **Guided intake is suggestion-based.** Common-sign chips help a farmer start; they are not a validated clinical questionnaire.
+- **Follow-up reminders are time-based and in-app only.** A configurable window (default 48h) triggers a prompt; there is no SMS, email, or push delivery.
+- **Mobile performance is measured on desktop/dev.** Images use `next/image`, and Lighthouse accessibility/best-practices/SEO are 1.0, but low-end device and throttled-network profiling is not possible with the current tooling.
 - **Provider quotas** can limit live evaluation and pilot volume on the free tier.
 
 See [`docs/validation-plan.md`](./docs/validation-plan.md) for the path to real-world use.

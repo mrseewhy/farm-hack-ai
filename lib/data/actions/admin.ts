@@ -13,7 +13,18 @@ import {
   messageImages,
   followUps,
 } from "@/lib/data/dal";
-import { desc, sql, eq, asc, and, inArray, ne } from "drizzle-orm";
+import {
+  desc,
+  sql,
+  eq,
+  asc,
+  and,
+  inArray,
+  ne,
+  isNull,
+  isNotNull,
+  lt,
+} from "drizzle-orm";
 import { z } from "zod";
 import {
   validatePublication,
@@ -21,6 +32,8 @@ import {
   normalizeProvenance,
   EXPERT_REVIEWED,
 } from "@/lib/guidance";
+import { parseInput } from "@/lib/errors";
+import { followUpReminderHours, reminderCutoff } from "@/lib/reminders";
 
 /**
  * Get the authenticated admin user from the session.
@@ -186,7 +199,11 @@ export async function getKnowledgeArticle(id: number) {
  * Create a new knowledge article (draft).
  */
 export async function createKnowledgeArticle(input: KnowledgeArticleInput) {
-  const validated = knowledgeArticleSchema.parse(input);
+  const validated = parseInput(
+    knowledgeArticleSchema,
+    input,
+    "Could not save the guidance article. Please check the fields and try again."
+  );
   await getCurrentAdmin();
 
   const [article] = await db
@@ -211,7 +228,11 @@ export async function createKnowledgeArticle(input: KnowledgeArticleInput) {
  * Update a knowledge article. Only draft or in_review articles can be updated.
  */
 export async function updateKnowledgeArticle(id: number, input: KnowledgeArticleInput) {
-  const validated = knowledgeArticleSchema.parse(input);
+  const validated = parseInput(
+    knowledgeArticleSchema,
+    input,
+    "Could not save the guidance article. Please check the fields and try again."
+  );
   await getCurrentAdmin();
 
   const [existing] = await db
@@ -546,7 +567,11 @@ export async function recordFollowUp(input: {
 }) {
   const user = await getCurrentUser();
 
-  const validated = followUpSchema.parse(input);
+  const validated = parseInput(
+    followUpSchema,
+    input,
+    "Could not save your feedback. Please try again."
+  );
 
   // Verify the conversation belongs to the user
   const conversation = await db
@@ -612,6 +637,43 @@ export async function getFollowUps(conversationId: number) {
     .from(followUps)
     .where(eq(followUps.conversationId, conversationId))
     .orderBy(desc(followUps.createdAt));
+}
+
+/**
+ * Get the most recent assessment that is old enough to ask the farmer about,
+ * and for which no follow-up has been recorded yet. Owner-scoped.
+ *
+ * The follow-up is attached to the assistant message produced by the
+ * assessment, so a reminder is only suppressed by feedback on that same
+ * message. Returns null when nothing is due.
+ */
+export async function getFollowUpReminders() {
+  const user = await getCurrentUser();
+  const cutoff = reminderCutoff(new Date(), followUpReminderHours());
+
+  const rows = await db
+    .select({
+      conversationId: assessments.conversationId,
+      messageId: assessments.assistantMessageId,
+      assessedAt: assessments.createdAt,
+      conversationTitle: conversations.title,
+    })
+    .from(assessments)
+    .innerJoin(conversations, eq(assessments.conversationId, conversations.id))
+    // A recorded follow-up on the assistant message clears the reminder for it.
+    .leftJoin(followUps, eq(followUps.messageId, assessments.assistantMessageId))
+    .where(
+      and(
+        eq(conversations.userId, user.id),
+        isNotNull(assessments.assistantMessageId),
+        isNull(followUps.id),
+        lt(assessments.createdAt, cutoff)
+      )
+    )
+    .orderBy(desc(assessments.createdAt))
+    .limit(1);
+
+  return rows[0] ?? null;
 }
 
 /**

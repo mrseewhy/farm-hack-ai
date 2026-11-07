@@ -16,7 +16,7 @@
 - [x] **4. Detect failed or unusable image inputs.** `lib/image.ts` verifies file signatures; unreachable/invalid images are counted and reported. Six evaluation image cases cover clear, blurry, fetch-failure, wrong content type, fake PNG, and too-small PNG.
 - [x] **5. Implement per-user AI request limits.** `lib/rate-limit.ts`; `AI_MAX_ASSESSMENTS_PER_DAY` (default 20, clamped to [1,500]); 5 tests in `scripts/rate-limit.test.mjs`.
 - [x] **6. Add structured AI error monitoring.** `lib/monitoring.ts` writes `ai_events` (model, prompt version, validation outcome, fallback/error, latency, image/safety flags); 14 monitoring tests; surfaced in the admin telemetry summary.
-- [x] **7. Add automated tests for critical workflows.** `npm test` runs 72 tests (safety, monitoring, guidance, rate-limit, follow-up, eval scoring); `npm run test:integration` adds two rolled-back DB tests for auth/ownership/linking.
+- [x] **7. Add automated tests for critical workflows.** `npm test` runs 90 tests (safety, monitoring, guidance, rate-limit, follow-up, reminders, error sanitization, eval scoring); `npm run test:integration` adds two rolled-back DB tests for auth/ownership/linking.
 
 **Phase end result:** Met. The pipeline is structured, safe by contract, observable, and tested.
 
@@ -27,10 +27,10 @@
 - [x] **10. Define evaluation criteria.** `evaluation/criteria.md` covers format, safety, escalation, uncertainty, follow-up, and image handling.
 - [x] **11. Build an automated evaluation runner.** `evaluation/runner.mjs` with `validate`, `record`, `replay`, and `selfcheck` modes.
 - [x] **12. Store evaluation results.** Runs in `evaluation/runs/*.json` record model, prompt version, outcome, latency, and errors; raw responses cached per configuration.
-- [~] **13. Compare two AI configurations.** 17 shared cases compared (`gemini-3.5-flash-lite` vs `gemini-3.1-flash-lite`), both 17/17 with identical uncertainty. The full 38-case comparison was blocked by free-tier quota (3.6/3.8 returned 429). Documented in the report.
-- [x] **14. Produce an evaluation report.** `evaluation/report.md` includes method, results, image evaluation, the comparison, ten findings, and explicit limitations.
+- [x] **13. Compare two AI configurations.** All 38 cases recorded and replayed under both `gemini-3.5-flash-lite` and `gemini-3.1-flash-lite`; both pass 38/38, 36/38 agree on uncertainty, and 0/38 assessments are textually identical. Documented in the report.
+- [x] **14. Produce an evaluation report.** `evaluation/report.md` includes method, results, image evaluation, the full 38-case comparison, findings, and explicit limitations.
 
-**Phase end result:** Met, with the comparison explicitly scoped as a 17-case check rather than a benchmark.
+**Phase end result:** Met. The comparison is a configuration check, not a benchmark.
 
 ## Phase 3: Improve agricultural grounding
 
@@ -38,22 +38,22 @@
 - [x] **16. Record source metadata and licensing.** Each row records publisher, title, URL, access date, and licence.
 - [x] **17. Create a source-backed knowledge library.** Admin guidance workflow with `draft → in_review → published`; `lib/guidance.ts` gates publication and keeps `source_backed` distinct from `expert_reviewed`. All published rows are `source_backed`; none are `expert_reviewed`.
 - [x] **18. Implement relevant guidance retrieval.** Assessments receive only guidance matching the conversation's crop.
-- [ ] **19. Add citations to farmer responses.** **Not done.** Guidance URLs are given to the model in the prompt but are not rendered as a citation block in the farmer UI. Documented as an open limitation.
+- [x] **19. Add citations to farmer responses.** Assessments now carry a server-owned `citations` array built by `buildGuidanceCitations` from the exact guidance supplied to the model. The chat UI renders a "Sources" block with provenance (source-backed vs expert-reviewed), publisher, title, access date, and a real URL. Citations are never model-generated and are omitted on fallback outcomes. Unit tests in `scripts/guidance.test.mjs`.
 - [x] **20. Add a no-evidence response policy.** `lib/safety.ts` `applyEvidencePolicy` + `safeFallbackAssessment`, with evaluation cases.
 
-**Phase end result:** Met except farmer-facing citations (item 19).
+**Phase end result:** Met.
 
 ## Phase 4: Improve the farmer experience
 
-- [~] **21. Add guided symptom collection.** The assistant returns follow-up questions and asks clarifying questions when evidence is thin; there is no dedicated step-by-step intake wizard.
+- [x] **21. Add guided symptom collection.** The empty-chat state offers tappable common-sign chips (yellowing, dark spots, wilting, holes, insects, leaf curl, fruit rot) in all four languages. Tapping composes an editable draft without duplicating a sign; the assessment pipeline is unchanged.
 - [x] **22. Improve photo capture guidance.** Photo tips (whole plant, close-up, lighting) in all four languages.
-- [x] **23. Display structured assessment cards.** `components/app/chat-screen.tsx` renders signs, causes, questions, actions, escalation, uncertainty, and the limitations notice.
-- [~] **24. Add follow-up reminders within conversations.** Farmers can submit outcome feedback on an assessment (`follow_ups`) and the assistant asks follow-up questions; there is no scheduled reminder to return.
-- [~] **25. Improve mobile performance.** Responsive layout, `h-dvh`, safe-area insets, and a mobile history drawer are implemented; performance is not benchmarked on a low-end device or throttled network (the browser tooling cannot emulate a device).
+- [x] **23. Display structured assessment cards.** `components/app/chat-screen.tsx` renders signs, causes, questions, actions, escalation, uncertainty, citations, and the limitations notice.
+- [x] **24. Add follow-up reminders within conversations.** `lib/reminders.ts` defines a bounded, configurable window (default 48h; `AI_FOLLOW_UP_REMINDER_HOURS`). `getFollowUpReminders` is owner-scoped and suppresses any assessment whose assistant message already has a `follow_ups` row. A dismissible banner links back to the conversation. Unit tests in `scripts/reminders.test.mjs`.
+- [x] **25. Improve mobile performance.** Crop photos now use `next/image` with a restricted `res.cloudinary.com` remote pattern (on both the farmer chat and admin review pages), so images are sized and lazy-loaded. A fresh page-load trace of `/chat` recorded 4,582 events with one 159 ms long task (dev server), and Lighthouse reported Accessibility, Best Practices, and SEO all 1.0. **Caveat:** the browser tooling cannot emulate a low-end CPU or throttled network, so those two axes remain unmeasured; the numbers above are desktop, dev-mode measurements, not a low-end benchmark.
 - [x] **26. Improve language consistency.** Fixed UI copy in four languages, persisted account preference, and chat/assessment rendering verified live for English, Yoruba, Hausa, and Igbo.
 - [x] **27. Add a clear limitations notice.** `limitationsNotice` in all four languages, rendered under each assessment.
 
-**Phase end result:** Met for the core tool; items 21, 24, and 25 remain partial and documented.
+**Phase end result:** Met. Items 21 and 24 are implemented; item 25 is implemented and measured within the tooling's limits.
 
 ## Phase 5: Monitoring and continuous improvement
 
@@ -84,7 +84,7 @@
 - [x] Strengthen multilingual safety.
 - [x] Create 25–40 synthetic evaluation cases.
 - [x] Build an automated evaluation runner.
-- [~] Run and document two AI configurations (17-case check; full run quota-blocked).
+- [x] Run and document two AI configurations (full 38-case run; both 38/38).
 - [x] Collect a small set of public agricultural references.
 - [x] Implement source-backed guidance with clear provenance.
 - [x] Add no-evidence handling.
@@ -94,7 +94,7 @@
 ## Definition of a successful prototype
 
 1. **AI engineering:** Multimodal input, structured outputs, contextual retrieval, uncertainty handling, and documented experiments. ✅
-2. **Responsible AI:** Safety checks, human escalation, traceable guidance, and clear limitations. ✅ (citations to the farmer still outstanding)
+2. **Responsible AI:** Safety checks, human escalation, traceable guidance, and clear limitations. ✅
 3. **Measurable technical performance:** Reproducible tests for safety-rule compliance, output validity, latency, and failure handling, without unsupported accuracy claims. ✅
 4. **Real-world relevance:** A mobile-friendly, multilingual assistant designed for Nigerian farmers. ✅ (usability and language review still pending)
 

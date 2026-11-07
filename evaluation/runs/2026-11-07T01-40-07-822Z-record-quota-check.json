@@ -1,0 +1,16 @@
+{
+  "mode": "record",
+  "config": "quota-check",
+  "model": "gemini-3.1-flash-lite",
+  "modelsUsed": [],
+  "generatedAt": "2026-11-07T01:40:07.823Z",
+  "summary": {
+    "total": 0,
+    "executed": 0,
+    "passed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "failedChecks": {}
+  },
+  "results": []
+}

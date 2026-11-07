@@ -29,7 +29,8 @@ import {
   type AssessmentResult,
 } from "@/lib/ai";
 import { buildAiEvent, logAiEvent, type AiEvent } from "@/lib/monitoring";
-import { formatGuidanceContext } from "@/lib/guidance";
+import { buildGuidanceCitations, formatGuidanceContext } from "@/lib/guidance";
+import { parseInput } from "@/lib/errors";
 import {
   assessmentWindowStart,
   dailyAssessmentLimit,
@@ -65,7 +66,11 @@ async function getCurrentUser() {
 export async function createConversation(
   input: CreateConversationInput
 ) {
-  const validated = createConversationSchema.parse(input);
+  const validated = parseInput(
+    createConversationSchema,
+    input,
+    "Could not start a new conversation. Please check your message and try again."
+  );
   const user = await getCurrentUser();
 
   const [conversation] = await db
@@ -87,7 +92,11 @@ export async function createConversation(
 export async function getConversations(
   input: Partial<ConversationListInput> = {}
 ) {
-  const validated = conversationListSchema.parse(input);
+  const validated = parseInput(
+    conversationListSchema,
+    input,
+    "Could not load your conversations. Please try again."
+  );
   const user = await getCurrentUser();
 
   return db
@@ -171,7 +180,11 @@ export async function getConversation(conversationId: number) {
  * Only the conversation owner can create messages.
  */
 export async function createMessage(input: CreateMessageInput) {
-  const validated = createMessageSchema.parse(input);
+  const validated = parseInput(
+    createMessageSchema,
+    input,
+    "Could not save your message. Please try again."
+  );
   const user = await getCurrentUser();
 
   // Verify the conversation belongs to the user
@@ -534,6 +547,9 @@ export async function runAssessment(input: {
     );
 
   const guidanceContext = formatGuidanceContext(guidanceArticles);
+  // The same filter and ordering as the prompt context, so a rendered citation
+  // always corresponds to a reference the model actually received.
+  const guidanceCitations = buildGuidanceCitations(guidanceArticles);
 
   let aiResult: Awaited<ReturnType<typeof assessCropHealth>>;
   try {
@@ -542,6 +558,7 @@ export async function runAssessment(input: {
       images,
       language: input.language,
       guidanceContext,
+      guidanceCitations,
       history,
     });
   } catch (error) {

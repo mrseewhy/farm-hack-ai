@@ -61,7 +61,7 @@ Narration: "Smallholder tomato growers in Nigeria lose harvests to disease and c
 ## Shot 9 — Evaluation (45s)
 
 1. Run `npm run eval:replay` and show **38/38** pass, then `npm run test:eval`.
-2. Show `evaluation/report.md`: the scope warning, the 17-case configuration check, and the bug findings.
+2. Show `evaluation/report.md`: the scope warning, the full 38-case configuration comparison, and the bug findings.
 3. Narration: "These are safety and structure results on synthetic cases — not accuracy. There is no expert-labelled dataset, so I make no accuracy claim."
 
 ## Shot 10 — Close (30s)

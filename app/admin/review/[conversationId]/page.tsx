@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import Image from "next/image";
 import { auth } from "@/lib/auth";
 import Link from "next/link";
 import { getAdminConversation } from "@/lib/data/actions/admin";
@@ -212,10 +213,12 @@ export default async function AdminReviewPage({
                     {message.images.length > 0 && (
                       <div className="mb-3 flex gap-2">
                         {message.images.map((img) => (
-                          <img
+                          <Image
                             key={img.id}
                             src={img.secureUrl}
                             alt="Crop photo attached to message"
+                            width={128}
+                            height={96}
                             className="h-24 w-32 rounded-lg object-cover"
                           />
                         ))}

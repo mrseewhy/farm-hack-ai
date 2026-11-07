@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
-import { ArrowUp, Camera, Menu, Plus, Settings, Sprout, X, RefreshCw } from "lucide-react";
+import { ArrowUp, Bell, Camera, Menu, Plus, Settings, Sprout, X, RefreshCw } from "lucide-react";
 import { Brand } from "@/components/app/brand";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import { languages, type Language, setPreferredLanguage } from "@/lib/preferences";
 import { t } from "@/lib/i18n";
 import { helpfulToOutcome } from "@/lib/follow-up";
+import { safeErrorMessage } from "@/lib/errors";
 import {
   createConversation,
   getConversations,
@@ -24,6 +26,7 @@ import {
   deleteConversation,
   runAssessment,
   recordFollowUp,
+  getFollowUpReminders,
 } from "@/lib/data/actions";
 import { cn } from "@/lib/utils";
 
@@ -54,6 +57,18 @@ export type Message = {
       total: number;
       failed: number;
     };
+    citations?: Array<{
+      index: number;
+      problem: string;
+      provenance: "source_backed" | "expert_reviewed";
+      publisher?: string;
+      title?: string;
+      url?: string;
+      accessedAt?: string;
+      license?: string;
+      reviewer?: string;
+      reviewedAt?: string;
+    }>;
   };
 };
 
@@ -64,6 +79,26 @@ type Conversation = {
   crop: string;
   createdAt: Date;
   updatedAt: Date;
+};
+
+/**
+ * The guided intake prompts shown on an empty chat. Each entry is an i18n key
+ * so tapping one composes the farmer's draft in their own language.
+ */
+const GUIDED_SYMPTOMS = [
+  "symptomYellowLeaves",
+  "symptomDarkSpots",
+  "symptomWilting",
+  "symptomHoles",
+  "symptomInsects",
+  "symptomLeafCurl",
+  "symptomFruitRot",
+] as const;
+
+type Reminder = {
+  conversationId: number;
+  messageId: number;
+  title: string;
 };
 
 export function ChatScreen({
@@ -103,6 +138,8 @@ export function ChatScreen({
   const fileRef = useRef<HTMLInputElement>(null);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(initialConversation ?? null);
+  const [reminder, setReminder] = useState<Reminder | null>(null);
+  const [reminderDismissed, setReminderDismissed] = useState(false);
 
   useEffect(() => {
     const reduceMotion = window.matchMedia(
@@ -122,6 +159,29 @@ export function ChatScreen({
   // Load conversation list on mount
   useEffect(() => {
     loadConversations();
+  }, []);
+
+  // Ask the server whether any assessment is old enough to follow up on.
+  // Reminders are guidance, not critical path, so a failure is only logged.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const next = await getFollowUpReminders();
+        if (!cancelled && next && next.messageId != null) {
+          setReminder({
+            conversationId: next.conversationId,
+            messageId: next.messageId,
+            title: next.conversationTitle,
+          });
+        }
+      } catch (err) {
+        console.error("Failed to load follow-up reminders:", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function loadConversations() {
@@ -166,7 +226,7 @@ export function ChatScreen({
       router.push(`/chat/${id}`);
     } catch (err) {
       console.error("Failed to load conversation:", err);
-      setError("Failed to load conversation. Please try again.");
+      setError(t("errorLoadConversation", language));
     }
   }
 
@@ -177,13 +237,13 @@ export function ChatScreen({
     // Validate file type
     const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
     if (!allowedTypes.includes(file.type)) {
-      setError("Invalid image type. Use JPEG, PNG, or WebP.");
+      setError(t("errorInvalidImage", language));
       return;
     }
 
     // Validate file size (10MB)
     if (file.size > 10 * 1024 * 1024) {
-      setError("Image too large. Maximum 10MB.");
+      setError(t("errorImageTooLarge", language));
       return;
     }
 
@@ -193,7 +253,7 @@ export function ChatScreen({
       0
     );
     if (existingImageCount >= 5) {
-      setError("Maximum 5 images per conversation reached.");
+      setError(t("errorMaxImages", language));
       return;
     }
 
@@ -208,6 +268,18 @@ export function ChatScreen({
     setUploadingFile(null);
     setUploadPreview(null);
     setError(null);
+  }
+
+  /**
+   * Guided intake: append a chosen sign to the draft without duplicating one
+   * the farmer already added. The draft remains fully editable afterwards.
+   */
+  function addSymptom(label: string) {
+    setDraft((prev) => {
+      if (prev.toLowerCase().includes(label.toLowerCase())) return prev;
+      const trimmed = prev.trim();
+      return trimmed ? `${trimmed}; ${label}` : label;
+    });
   }
 
   async function sendMessage() {
@@ -264,7 +336,9 @@ export function ChatScreen({
           } catch {
             // Ignore rollback failures; the upload error is the primary signal.
           }
-          setError(uploadResult.error ?? "Upload failed");
+          setError(
+            safeErrorMessage(uploadResult.error, t("errorInvalidImage", language))
+          );
           // Do not assess a photo message without its photo — a photo-only
           // message would otherwise be assessed against empty evidence.
           return;
@@ -314,14 +388,7 @@ export function ChatScreen({
       if (!assessmentResult) return;
 
       const { assessment, assistantMessage } = assessmentResult as {
-        assessment: {
-          observedSigns: string[];
-          possibleCauses: string[];
-          followUpQuestions: string[];
-          immediateActions: string[];
-          whenToSeekHelp: string;
-          uncertainty: { level: "low" | "medium" | "high"; reason: string };
-        };
+        assessment: NonNullable<Message["assessment"]>;
         assistantMessage: { id: number; content: string };
       };
 
@@ -344,7 +411,7 @@ export function ChatScreen({
       await loadConversations();
     } catch (err) {
       console.error("Send failed:", err);
-      setError(err instanceof Error ? err.message : "Failed to send message. Please try again.");
+      setError(safeErrorMessage(err, t("errorSendFailed", language)));
     } finally {
       setSending(false);
     }
@@ -398,7 +465,7 @@ export function ChatScreen({
         newChat();
       }
     } catch {
-      setError("Failed to delete conversation.");
+      setError(t("errorDeleteConversation", language));
     }
   }
 
@@ -432,7 +499,7 @@ export function ChatScreen({
       setFeedbackStage(null);
       setObservation("");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to submit feedback. Please try again.");
+      setError(safeErrorMessage(err, t("errorFeedbackFailed", language)));
     } finally {
       setSubmittingFeedback(false);
     }
@@ -577,6 +644,37 @@ export function ChatScreen({
           </div>
         </header>
 
+        {reminder && !reminderDismissed && (
+          <div className="shrink-0 border-b bg-primary/5 px-4 py-3 md:px-7">
+            <div className="mx-auto flex w-full max-w-3xl items-start gap-3">
+              <Bell className="mt-0.5 size-4 shrink-0 text-primary" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">
+                  {t("reminderTitle", language)}
+                </p>
+                <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                  {t("reminderBody", language)}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <Button
+                  size="sm"
+                  onClick={() => selectConversation(reminder.conversationId)}
+                >
+                  {t("reminderAction", language)}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setReminderDismissed(true)}
+                >
+                  {t("reminderDismiss", language)}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <main
           className={`flex min-h-0 flex-1 flex-col ${messages.length ? "" : "justify-center"}`}
         >
@@ -595,8 +693,24 @@ export function ChatScreen({
                 <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-muted-foreground sm:text-base">
                   {t("describeSigns", language)}
                 </p>
+                <div className="mx-auto mt-7 max-w-md">
+                  <p className="text-sm font-semibold text-primary">{t("guidedTitle", language)}</p>
+                  <p className="mt-1 mb-3 text-xs text-muted-foreground">{t("guidedHint", language)}</p>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {GUIDED_SYMPTOMS.map((key) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => addSymptom(t(key, language))}
+                        className="rounded-full border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {t(key, language)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div className="mt-8 max-w-sm mx-auto">
-                  <h3 className="text-sm font-semibold text-primary mb-2">{t("photoTips", language)}</h3>
+                  <h2 className="text-sm font-semibold text-primary mb-2">{t("photoTips", language)}</h2>
                   <ul className="text-sm text-muted-foreground space-y-2 list-disc pl-4">
                     <li>{t("tipWholePlant", language)}</li>
                     <li>{t("tipAffectedPart", language)}</li>
@@ -628,10 +742,12 @@ export function ChatScreen({
                       {message.images.length > 0 && (
                         <div className="mb-3 flex gap-2">
                           {message.images.map((img) => (
-                            <img
+                            <Image
                               key={img.id}
                               src={img.secureUrl}
                               alt="Crop photo attached to message"
+                              width={128}
+                              height={96}
                               className="h-24 w-32 rounded-lg object-cover"
                             />
                           ))}
@@ -707,6 +823,52 @@ export function ChatScreen({
                               </p>
                             </div>
                           )}
+                          {message.assessment.citations &&
+                            message.assessment.citations.length > 0 && (
+                              <div className="mb-2">
+                                <p className="text-xs font-semibold text-primary mb-1">
+                                  {t("sourcesTitle", language)}
+                                </p>
+                                <ul className="space-y-1.5">
+                                  {message.assessment.citations.map((citation) => (
+                                    <li
+                                      key={citation.index}
+                                      className="text-[11px] leading-4 text-muted-foreground"
+                                    >
+                                      <span className="font-medium text-foreground/80">
+                                        [{citation.index}] {citation.problem}
+                                      </span>
+                                      {citation.provenance === "expert_reviewed" ? (
+                                        <span className="block">
+                                          {t("sourceExpertReviewed", language)}
+                                          {citation.reviewer ? ` — ${citation.reviewer}` : ""}
+                                          {citation.reviewedAt ? ` · ${citation.reviewedAt}` : ""}
+                                        </span>
+                                      ) : (
+                                        <span className="block">
+                                          {t("sourceBackedLabel", language)}
+                                          {citation.publisher ? ` — ${citation.publisher}` : ""}
+                                          {citation.title ? ` · ${citation.title}` : ""}
+                                          {citation.accessedAt
+                                            ? ` · ${t("sourceAccessed", language)} ${citation.accessedAt}`
+                                            : ""}
+                                        </span>
+                                      )}
+                                      {citation.url && (
+                                        <a
+                                          href={citation.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="break-all text-primary underline underline-offset-2"
+                                        >
+                                          {citation.url}
+                                        </a>
+                                      )}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
                           <p className="mt-2 text-[11px] leading-4 text-muted-foreground/80">
                             {t("limitationsNotice", language)}
                           </p>
@@ -858,7 +1020,7 @@ export function ChatScreen({
                 }
               }}
               placeholder={t("placeholderMessage", language)}
-              className="min-h-16 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
+              className="min-h-16 resize-none border-0 bg-transparent text-foreground shadow-none focus-visible:ring-0"
               disabled={sending}
             />
             <div className="flex items-center justify-between">

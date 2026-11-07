@@ -123,6 +123,34 @@ const translations: Record<Language, Record<string, string>> = {
     tipGoodLighting: "Good lighting — natural light, no flash",
     limitationsNotice:
       "This is preliminary AI guidance, not a confirmed diagnosis. Confirm important decisions with a local agricultural extension worker.",
+
+    // Sources (citations attached to an assessment)
+    sourcesTitle: "Sources for this guidance",
+    sourceBackedLabel: "Source-backed (not expert-reviewed)",
+    sourceExpertReviewed: "Expert-reviewed",
+    sourceAccessed: "Accessed",
+
+    // Guided symptom intake
+    guidedTitle: "Common signs — tap to add",
+    guidedHint: "Not sure what to write? Start by choosing what you see.",
+    symptomYellowLeaves: "Yellowing leaves",
+    symptomDarkSpots: "Dark spots on leaves",
+    symptomWilting: "Wilting or drooping",
+    symptomHoles: "Holes in leaves",
+    symptomInsects: "Insects or whiteflies",
+    symptomLeafCurl: "Curled or deformed leaves",
+    symptomFruitRot: "Fruit rot or spots",
+
+    // Follow-up reminders
+    reminderTitle: "Did the advice help your crop?",
+    reminderBody:
+      "You asked about a crop problem a few days ago. Sharing what happened helps you get better advice and helps other farmers.",
+    reminderAction: "Share an update",
+    reminderDismiss: "Not now",
+
+    // Errors
+    errorSendFailed: "Could not send your message. Please try again.",
+    errorFeedbackFailed: "Could not submit feedback. Please try again.",
   },
 
   Yoruba: {
@@ -244,6 +272,34 @@ const translations: Record<Language, Record<string, string>> = {
     tipGoodLighting: "Ìmọ́lẹ̀ tó dára — ìmọ́lẹ̀ àdánidá, má lo fíláṣì",
     limitationsNotice:
       "Èyí jẹ́ ìtọ́sọ́nà AI alakọbẹ̀rẹ̀, kì í ṣe ìdánilójú àrùn. Máa gbà àwọn ìpinnu pàtàkì ní ìmọ̀ràn lọ́wọ́ òṣìṣẹ́ ìtẹ̀numọ́síṣẹ́ àgbẹ̀.",
+
+    // Sources
+    sourcesTitle: "Àwọn orísun fún ìtọ́sọ́nà yìí",
+    sourceBackedLabel: "Láti orísun (a kò ṣàyẹ̀wò pẹ̀lú ògbógi)",
+    sourceExpertReviewed: "A ṣàyẹ̀wò pẹ̀lú ògbógi",
+    sourceAccessed: "A wọlé sí",
+
+    // Guided symptom intake
+    guidedTitle: "Àwọn àmì tí ó wọ́pọ̀ — tẹ̀ láti fi kún",
+    guidedHint: "Ṣé o kò mọ ohun tí o yẹ kí o kọ? Bẹ̀rẹ̀ nípa yíyan ohun tí o rí.",
+    symptomYellowLeaves: "Ewé tí ó ń yọ́ (ofeefee)",
+    symptomDarkSpots: "Àmì dúdú lórí ewé",
+    symptomWilting: "Rírọ tàbí dídà",
+    symptomHoles: "Iho nínú ewé",
+    symptomInsects: "Kòkòrò tàbí eéfín funfun",
+    symptomLeafCurl: "Ewé tí ó ká tàbí tí ó yí padà",
+    symptomFruitRot: "Ìbàjẹ́ èso tàbí àmì",
+
+    // Follow-up reminders
+    reminderTitle: "Ṣé ìmọ̀ràn náà ràn ohun ọ̀gbà rẹ lọ́wọ́?",
+    reminderBody:
+      "O béèrè nípa ìṣòro ohun ọ̀gbà ní ọjọ́ díẹ̀ sẹ́yìn. Pínpín ohun tí ó ṣẹlẹ̀ yóò ràn ọ́ lọ́wọ́ láti gba ìmọ̀ràn tí ó dára jù, yóò sì ràn àwọn àgbẹ̀ mìíràn lọ́wọ́.",
+    reminderAction: "Pín ìmọ̀ tuntun",
+    reminderDismiss: "Kì í ṣe báyìí",
+
+    // Errors
+    errorSendFailed: "A kò lè rán ìfiránṣẹ́ rẹ. Jọ̀wọ́ gbìyànjú lẹ́ẹ̀kan sí i.",
+    errorFeedbackFailed: "A kò lè fi èrò rẹ ránṣẹ́. Jọ̀wọ́ gbìyànjú lẹ́ẹ̀kan sí i.",
   },
 
   Hausa: {
@@ -364,6 +420,34 @@ const translations: Record<Language, Record<string, string>> = {
     tipGoodLighting: "Haske mai kyau — hasken rana, ba walƙiya",
     limitationsNotice:
       "Wannan jagora ce ta farko ta AI, ba tabbatacciyar ganewar asali ba. Tabbatar da muhimman shawarwari da ma'aikacin aikin gona na gida.",
+
+    // Sources
+    sourcesTitle: "Tushen wannan jagora",
+    sourceBackedLabel: "Daga tushe (ba ƙwararren masani ya duba ba)",
+    sourceExpertReviewed: "Ƙwararren masani ya duba",
+    sourceAccessed: "An shiga",
+
+    // Guided symptom intake
+    guidedTitle: "Alamun da suka zama ruwan dare — matsa don ƙarawa",
+    guidedHint: "Ba ka san abin da za ka rubuta ba? Fara da zaɓar abin da kake gani.",
+    symptomYellowLeaves: "Ganye masu ruwan rawaya",
+    symptomDarkSpots: "Duhun tabo a kan ganye",
+    symptomWilting: "Yin shuɗi ko faɗuwa",
+    symptomHoles: "Ramuka a cikin ganye",
+    symptomInsects: "Kwari ko fararen ƙuda",
+    symptomLeafCurl: "Ganye da suka naɗe ko suka lalace",
+    symptomFruitRot: "Rubewar 'ya'ya ko tabo",
+
+    // Follow-up reminders
+    reminderTitle: "Shin shawarar ta taimaki amfanin gonarka?",
+    reminderBody:
+      "Ka yi tambaya kan matsalar amfanin gona 'yan kwanaki da suka wuce. Raba abin da ya faru zai taimaka maka samun shawara mafi kyau kuma zai taimaki sauran manoma.",
+    reminderAction: "Raba sabuntawa",
+    reminderDismiss: "Ba yanzu ba",
+
+    // Errors
+    errorSendFailed: "Ba a iya aika saƙonka ba. Don Allah sake gwadawa.",
+    errorFeedbackFailed: "Ba a iya aika ra'ayinka ba. Don Allah sake gwadawa.",
   },
 
   Igbo: {
@@ -482,6 +566,34 @@ const translations: Record<Language, Record<string, string>> = {
     tipGoodLighting: "Ìhè dị mma — ìhè eke, ọ bụghị flash",
     limitationsNotice:
       "Nke a bụ nduzi AI mbido, ọ bụghị nchọpụta ọrịa doro anya. Kwenye mkpebi ndị dị mkpa na onye ọrụ ugbo mpaghara.",
+
+    // Sources
+    sourcesTitle: "Isi mmalite maka ntuziaka a",
+    sourceBackedLabel: "Site n'isi mmalite (ọ bụghị ọkachamara nyochara ya)",
+    sourceExpertReviewed: "Ọkachamara nyochara ya",
+    sourceAccessed: "Enyochara ya",
+
+    // Guided symptom intake
+    guidedTitle: "Ihe ịrịba ama ndị a na-ahụkarị — pịa iji tinye",
+    guidedHint: "Ọ dịghị gị mma ihe ị ga-ede? Malite site n'ịhọrọ ihe ị na-ahụ.",
+    symptomYellowLeaves: "Akwụkwọ na-acha odo odo",
+    symptomDarkSpots: "Ntụpọ ojii na akwụkwọ",
+    symptomWilting: "Ịkpọnwu ma ọ bụ ịda",
+    symptomHoles: "Oghere n'ime akwụkwọ",
+    symptomInsects: "Ụmụ ahụhụ ma ọ bụ ijiji ọcha",
+    symptomLeafCurl: "Akwụkwọ gbagọrọ agbagọ",
+    symptomFruitRot: "Ọrịa mkpụrụ ma ọ bụ ntụpọ",
+
+    // Follow-up reminders
+    reminderTitle: "Ntuziaka ahụ nyere ihe ubi gị aka?",
+    reminderBody:
+      "Ị jụrụ maka nsogbu ihe ubi ụbọchị ole na ole gara aga. Ịkọ ihe mere ga-enyere gị aka inweta ntuziaka ka mma ma nyere ndị ọrụ ubi ndị ọzọ aka.",
+    reminderAction: "Kekọọ mmelite",
+    reminderDismiss: "Ọ bụghị ugbu a",
+
+    // Errors
+    errorSendFailed: "Enweghị ike izipu ozi gị. Biko nwaa ọzọ.",
+    errorFeedbackFailed: "Enweghị ike izipu echiche gị. Biko nwaa ọzọ.",
   },
 };
 

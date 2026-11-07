@@ -23,5 +23,6 @@ export {
   getPublishedGuidance,
   recordFollowUp,
   getFollowUps,
+  getFollowUpReminders,
 } from "./admin";
 export type { AiTelemetrySummary } from "./admin";

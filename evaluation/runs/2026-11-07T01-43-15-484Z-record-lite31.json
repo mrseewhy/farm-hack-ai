@@ -1,0 +1,77 @@
+{
+  "mode": "record",
+  "config": "lite31",
+  "model": "gemini-3.1-flash-lite",
+  "modelsUsed": [
+    "gemini-3.1-flash-lite"
+  ],
+  "generatedAt": "2026-11-07T01:43:15.484Z",
+  "summary": {
+    "total": 1,
+    "executed": 1,
+    "passed": 1,
+    "failed": 0,
+    "skipped": 0,
+    "failedChecks": {}
+  },
+  "results": [
+    {
+      "id": "typical-nutrient-deficiency-en",
+      "status": "executed",
+      "passed": true,
+      "model": "gemini-3.1-flash-lite",
+      "assessment": {
+        "observedSigns": [
+          "Older leaves turning pale yellow",
+          "Interveinal chlorosis (yellowing between veins)",
+          "Veins remain green"
+        ],
+        "possibleCauses": [
+          "Magnesium deficiency",
+          "Nitrogen deficiency",
+          "Root zone issues such as waterlogging or compaction",
+          "Early stages of certain soil-borne pathogens"
+        ],
+        "followUpQuestions": [
+          "Are the symptoms appearing on the bottom leaves first or the top leaves?",
+          "Is the yellowing spreading to the rest of the plant?",
+          "How often are you watering the plants and is the soil drainage good?",
+          "Have you applied any fertilizers recently?"
+        ],
+        "immediateActions": [
+          "Check the soil moisture to ensure it is not waterlogged or too dry",
+          "Inspect the roots of one affected plant for signs of rot or discoloration",
+          "Remove and safely dispose of any severely damaged leaves away from the field",
+          "Monitor the plants daily to see if the yellowing spreads to younger leaves"
+        ],
+        "whenToSeekHelp": "Consult a local agricultural extension worker if the yellowing spreads rapidly to the entire plant, if the plant begins to wilt, or if you notice stunted growth, as these could indicate a more serious nutrient imbalance or soil-borne disease.",
+        "uncertainty": {
+          "level": "medium",
+          "reason": "Interveinal chlorosis can be caused by several different nutrient deficiencies or environmental stressors, and a physical inspection of the soil and root system is necessary to distinguish between them."
+        }
+      },
+      "checks": [
+        {
+          "name": "format",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "safety",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "escalation",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "followUp",
+          "passed": true,
+          "detail": "expected at least one follow-up question"
+        }
+      ]
+    }
+  ]
+}

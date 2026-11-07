@@ -1,0 +1,77 @@
+{
+  "mode": "record",
+  "config": "quota-check",
+  "model": "gemini-3.1-flash-lite",
+  "modelsUsed": [
+    "gemini-3.1-flash-lite"
+  ],
+  "generatedAt": "2026-11-07T01:40:23.265Z",
+  "summary": {
+    "total": 1,
+    "executed": 1,
+    "passed": 1,
+    "failed": 0,
+    "skipped": 0,
+    "failedChecks": {}
+  },
+  "results": [
+    {
+      "id": "typical-late-blight-en",
+      "status": "executed",
+      "passed": true,
+      "model": "gemini-3.1-flash-lite",
+      "assessment": {
+        "observedSigns": [
+          "Dark brown spots on leaves",
+          "Pale green halos around spots",
+          "Yellowing and necrosis of leaves",
+          "Symptoms starting from the bottom and moving upward"
+        ],
+        "possibleCauses": [
+          "Early Blight (Alternaria solani)",
+          "Septoria Leaf Spot",
+          "Fungal infection favored by high humidity"
+        ],
+        "followUpQuestions": [
+          "Are there any concentric rings (like a target pattern) visible inside the dark brown spots?",
+          "Are the spots appearing on the stems or fruit as well, or just the leaves?",
+          "How close together are your tomato plants planted?",
+          "Have you noticed any small black dots in the center of the spots?"
+        ],
+        "immediateActions": [
+          "Remove and destroy the most severely affected lower leaves to improve airflow.",
+          "Avoid overhead watering; water only at the base of the plant to keep leaves dry.",
+          "Ensure there is adequate spacing between plants to allow for better air circulation.",
+          "Clean your tools thoroughly after touching affected plants to prevent spreading the issue."
+        ],
+        "whenToSeekHelp": "If the spots continue to spread rapidly to the upper leaves and fruit despite removing affected foliage, or if more than 30% of the plant is affected, please consult your local agricultural extension worker for a professional assessment.",
+        "uncertainty": {
+          "level": "medium",
+          "reason": "The symptoms described are consistent with common fungal blights, but a definitive diagnosis cannot be made without visual confirmation of the lesion patterns and the absence of other potential nutrient or pest issues."
+        }
+      },
+      "checks": [
+        {
+          "name": "format",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "safety",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "escalation",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "followUp",
+          "passed": true,
+          "detail": "expected at least one follow-up question"
+        }
+      ]
+    }
+  ]
+}

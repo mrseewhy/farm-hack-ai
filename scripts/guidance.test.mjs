@@ -16,6 +16,8 @@ import {
   isPublishable,
   describeProvenance,
   formatGuidanceContext,
+  buildGuidanceCitations,
+  usableGuidanceArticles,
 } from "../lib/guidance.ts";
 
 const baseArticle = {
@@ -141,4 +143,57 @@ test("formatGuidanceContext skips incomplete entries but keeps valid ones", () =
   ]);
   assert.doesNotMatch(context, /provenance: source_backed/);
   assert.match(context, /provenance: expert_reviewed/);
+});
+
+test("usableGuidanceArticles drops entries missing a problem or action", () => {
+  const usable = usableGuidanceArticles([
+    { ...sourceBacked, problem: "" },
+    { ...sourceBacked, approvedActions: "   " },
+    expertReviewed,
+  ]);
+  assert.equal(usable.length, 1);
+  assert.equal(usable[0], expertReviewed);
+});
+
+test("buildGuidanceCitations carries trusted source metadata, never model text", () => {
+  const citations = buildGuidanceCitations([sourceBacked, expertReviewed]);
+
+  assert.equal(citations.length, 2);
+  assert.deepEqual(citations[0], {
+    index: 1,
+    problem: "Early blight",
+    provenance: "source_backed",
+    publisher: "University of California Statewide IPM Program",
+    title: "Early Blight - UC IPM Pest Management Guidelines: Tomato",
+    url: "https://ipm.ucanr.edu/agriculture/tomato/early-blight/",
+    accessedAt: "2026-11-07",
+    license: "educational, noncommercial use with attribution",
+  });
+  assert.deepEqual(citations[1], {
+    index: 2,
+    problem: "Early blight",
+    provenance: "expert_reviewed",
+    reviewer: "Dr A. Agronomist",
+    reviewedAt: "2026-11-05",
+  });
+});
+
+test("buildGuidanceCitations omits a non-http source URL rather than linking it", () => {
+  const [citation] = buildGuidanceCitations([
+    { ...sourceBacked, sourceUrl: "javascript:alert(1)" },
+  ]);
+  assert.equal(citation.url, undefined);
+});
+
+test("citations and prompt context agree on which entries were supplied", () => {
+  const articles = [
+    { ...sourceBacked, problem: "" },
+    sourceBacked,
+    expertReviewed,
+  ];
+  assert.equal(
+    buildGuidanceCitations(articles).length,
+    usableGuidanceArticles(articles).length
+  );
+  assert.equal(buildGuidanceCitations([]).length, 0);
 });

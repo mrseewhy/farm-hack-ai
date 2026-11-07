@@ -102,9 +102,9 @@ Deletions cascade: removing a conversation removes its messages, assessments, an
 
 ## Known gaps
 
-- Public guidance URLs are given to the model but are not yet rendered as citations in the farmer UI.
-- Guided symptom collection is limited to the model's follow-up questions; there is no dedicated intake wizard.
-- No scheduled follow-up reminders.
-- Mobile performance is designed for but not benchmarked on low-end devices.
+- Guidance is source-backed, not expert-reviewed; citations are rendered in the farmer UI so this is visible.
+- Guided intake is suggestion-based; there is no validated step-by-step questionnaire.
+- Follow-up reminders are in-app only (no SMS/email/push) and time-based rather than outcome-driven.
+- Mobile performance is measured in desktop/dev; low-end device and throttled-network profiling remains outstanding.
 
 See [`../evaluation/report.md`](../evaluation/report.md) for the evaluation design and [`validation-plan.md`](./validation-plan.md) for the route to real-world validation.

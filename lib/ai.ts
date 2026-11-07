@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import {
   assessmentResultSchema,
   type AssessmentResult,
+  type GuidanceCitation,
 } from "@/lib/data/validation/assessment";
 import {
   applyEvidencePolicy,
@@ -569,6 +570,7 @@ export async function assessCropHealth({
   images,
   language,
   guidanceContext,
+  guidanceCitations,
   history = [],
   generateRaw,
 }: {
@@ -576,6 +578,11 @@ export async function assessCropHealth({
   images: Array<{ secureUrl: string }>;
   language: string;
   guidanceContext?: string;
+  /**
+   * Trusted, server-owned references for the guidance supplied above. Attached
+   * to the result so a farmer can inspect the sources; never model-generated.
+   */
+  guidanceCitations?: GuidanceCitation[];
   history?: ConversationTurn[];
   /**
    * Optional model responder. The evaluation harness supplies a recorded
@@ -649,6 +656,17 @@ export async function assessCropHealth({
       latencyMs: Date.now() - startedAt,
     }
   );
+
+  // Attach the trusted citations only when the model produced the assessment.
+  // A safe fallback must not imply that reference material was used when it was
+  // discarded.
+  if (
+    guidanceCitations &&
+    guidanceCitations.length > 0 &&
+    telemetry.outcome !== "fallback"
+  ) {
+    assessment.citations = guidanceCitations;
+  }
 
   return { assessment, model, telemetry };
 }

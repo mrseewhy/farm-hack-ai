@@ -54,7 +54,7 @@ Do **not** report a pass rate on the synthetic set as an accuracy figure.
 
 ## Open limitations carried forward
 
-- Guidance URLs are not yet surfaced as citations in the farmer UI.
-- Guided symptom collection and follow-up reminders are basic.
-- Mobile performance is not benchmarked on low-end devices or throttled networks.
+- Guidance citations are rendered as source-backed references, not expert review; every published article still needs qualified review.
+- Guided intake is suggestion-based, and reminders are in-app only; neither replaces a clinical intake or a reminder channel.
+- Mobile performance is measured on desktop/dev; low-end device and throttled-network profiling is still required.
 - Free-tier model quota constrains live evaluation and pilot volume; billing is required for scale.
