@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { languages, type Language, setPreferredLanguage } from "@/lib/preferences";
 import { t } from "@/lib/i18n";
+import { helpfulToOutcome } from "@/lib/follow-up";
 import {
   createConversation,
   getConversations,
@@ -417,11 +418,14 @@ export function ChatScreen({
     setSubmittingFeedback(true);
     setError(null);
     try {
+      // The UI choice is yes | no | unsure, while the persisted `outcome`
+      // column expects helped | not_helped | unsure.
+      const outcome = helpfulToOutcome(feedbackStage.helpful);
       await recordFollowUp({
         conversationId: currentConversationId,
         messageId: feedbackStage.messageId,
         farmerObservation: observation.trim(),
-        outcome: feedbackStage.helpful,
+        outcome,
         helpful: feedbackStage.helpful,
       });
       setFeedbackSubmitted(feedbackStage.messageId);

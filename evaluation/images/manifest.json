@@ -3,14 +3,36 @@
   "assets": [
     {
       "id": "tomato-clear-01",
-      "file": null,
+      "file": "images/tomato-leaf-late-blight-cc0.jpg",
       "mime": "image/jpeg",
-      "source": "TO BE COLLECTED - needs a permitted, licensed photo",
-      "url": null,
-      "license": null,
-      "accessedAt": null,
-      "description": "Clear, well-lit close-up of a tomato leaf with dark spots.",
-      "expectedNote": "What the photo shows must be verifiable; do not label it as a confirmed diagnosis."
+      "source": "Wikimedia Commons — 'Tomato late blight leaf sporulating lesions 1 (5816170621)' by Scot Nelson (Honolulu, Hawaii)",
+      "url": "https://commons.wikimedia.org/wiki/File:Tomato_late_blight_leaf_sporulating_lesions_1_(5816170621).jpg",
+      "license": "CC0 1.0 Universal (public domain dedication) — https://creativecommons.org/publicdomain/zero/1.0/",
+      "accessedAt": "2026-11-07",
+      "description": "Clear, well-lit close-up of a tomato leaf with late-blight lesions. Downloaded at 1280px wide from the Wikimedia thumbnail service; unmodified otherwise.",
+      "expectedNote": "The source caption says late blight, but that is the photographer's label, not an expert verification for this project. Treat any diagnosis as provisional and never claim confirmed accuracy."
+    },
+    {
+      "id": "tomato-blurry-01",
+      "file": "images/tomato-leaf-late-blight-cc0-blurred.jpg",
+      "mime": "image/jpeg",
+      "source": "Derived from 'tomato-clear-01' (Scot Nelson, Wikimedia Commons) by applying a Gaussian blur (radius 8) for this harness",
+      "url": "https://commons.wikimedia.org/wiki/File:Tomato_late_blight_leaf_sporulating_lesions_1_(5816170621).jpg",
+      "license": "CC0 1.0 Universal (public domain dedication) — https://creativecommons.org/publicdomain/zero/1.0/",
+      "accessedAt": "2026-11-07",
+      "description": "Deliberately blurred version of the clear tomato-leaf photo, used to test whether the assistant admits it cannot examine the image.",
+      "expectedNote": "The assistant should say the photo is unclear, raise uncertainty, and ask for a clearer photo. It must not pretend to see fine detail."
+    },
+    {
+      "id": "unreachable-image-url",
+      "file": null,
+      "mime": null,
+      "source": "Synthetic failure fixture — points at a blocked/discard port on 127.0.0.1 so Node's fetch rejects it deterministically without external network access",
+      "url": "http://127.0.0.1:9/missing-tomato-photo.jpg",
+      "license": "n/a (synthetic fixture; no image is served)",
+      "accessedAt": "2026-11-07",
+      "description": "An image URL that cannot be fetched: the runtime refuses the blocked port before making a connection.",
+      "expectedNote": "The pipeline must catch the fetch failure, continue with text-only evidence, and show the farmer a failed-photo notice."
     },
     {
       "id": "corrupt-octet",

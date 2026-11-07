@@ -13,6 +13,10 @@
 //     `ai_events` table through Drizzle;
 //   - the exact aggregate query used by `getAiTelemetrySummary` reads the
 //     expected deltas back;
+//   - a conversation, its user message, assistant reply, assessment link, and
+//     AI event behave correctly under the real constraints (unique assessment
+//     per message, owner-scoped reads, cascade delete, and telemetry
+//     `on delete set null`);
 //   - the whole thing runs inside a transaction that is rolled back, so no
 //     rows are left behind.
 //
@@ -26,12 +30,17 @@ import assert from "node:assert/strict";
 
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 
 import { assessCropHealth } from "@/lib/ai";
 import { buildAiEvent } from "@/lib/monitoring";
 import { aiEventToRow } from "@/lib/data/ai-event-row";
-import { aiEvents } from "@/lib/data/dal/schema";
+import {
+  aiEvents,
+  assessments,
+  conversations,
+  messages,
+} from "@/lib/data/dal/schema";
 
 const ENABLED = process.env.RUN_DB_INTEGRATION === "1";
 const HAS_DB = Boolean(process.env.DATABASE_URL);
@@ -205,6 +214,181 @@ test(
         .from(aiEvents)
         .where(inArray(aiEvents.id, insertedIds));
       assert.equal(leftover.length, 0, "rolled-back rows must not persist");
+    } finally {
+      await pool.end();
+    }
+  }
+);
+
+test(
+  "assessment links, ownership scoping, and cascades hold, then roll back",
+  { skip: SKIP },
+  async () => {
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    const db = drizzle(pool);
+
+    try {
+      const SENTINEL = new Error("intentional rollback");
+      let txError;
+
+      try {
+        await db.transaction(async (tx) => {
+          const [conversation] = await tx
+            .insert(conversations)
+            .values({
+              userId: "integration-owner-a",
+              title: "Integration conversation",
+              language: "English",
+            })
+            .returning();
+
+          const [otherConversation] = await tx
+            .insert(conversations)
+            .values({
+              userId: "integration-owner-b",
+              title: "Another farmer",
+              language: "Yoruba",
+            })
+            .returning();
+
+          const [question] = await tx
+            .insert(messages)
+            .values({
+              conversationId: conversation.id,
+              role: "user",
+              content: "My tomato leaves have dark spots.",
+              language: "English",
+              status: "sent",
+            })
+            .returning();
+
+          const [reply] = await tx
+            .insert(messages)
+            .values({
+              conversationId: conversation.id,
+              role: "assistant",
+              content: "Possible early blight; consult an extension worker.",
+              language: "English",
+              status: "sent",
+            })
+            .returning();
+
+          const [assessment] = await tx
+            .insert(assessments)
+            .values({
+              conversationId: conversation.id,
+              messageId: question.id,
+              assistantMessageId: reply.id,
+              structuredResult: JSON.stringify({
+                observedSigns: [],
+                possibleCauses: [],
+                followUpQuestions: [],
+                immediateActions: [],
+                whenToSeekHelp: "Consult an extension worker.",
+                uncertainty: { level: "high", reason: "Integration test." },
+              }),
+              model: "integration-test-model",
+            })
+            .returning();
+
+          // The explicit link is stored and readable.
+          const [stored] = await tx
+            .select()
+            .from(assessments)
+            .where(eq(assessments.id, assessment.id))
+            .limit(1);
+          assert.equal(stored.assistantMessageId, reply.id);
+          assert.equal(stored.messageId, question.id);
+
+          // Owner-scoped reads cannot see another farmer's conversation.
+          const owned = await tx
+            .select({ id: conversations.id })
+            .from(conversations)
+            .where(
+              and(
+                eq(conversations.id, conversation.id),
+                eq(conversations.userId, "integration-owner-a")
+              )
+            );
+          assert.equal(owned.length, 1);
+
+          const notOwned = await tx
+            .select({ id: conversations.id })
+            .from(conversations)
+            .where(
+              and(
+                eq(conversations.id, conversation.id),
+                eq(conversations.userId, "integration-owner-b")
+              )
+            );
+          assert.equal(notOwned.length, 0);
+          assert.notEqual(otherConversation.id, conversation.id);
+
+          // The one-assessment-per-message constraint is enforced. Use a
+          // savepoint so the failed insert does not abort the outer transaction.
+          await assert.rejects(
+            tx.transaction(async (savepoint) => {
+              await savepoint.insert(assessments).values({
+                conversationId: conversation.id,
+                messageId: question.id,
+                assistantMessageId: reply.id,
+                structuredResult: "{}",
+                model: "duplicate-test",
+              });
+            }),
+            (error) => {
+              const candidate = error;
+              return (
+                candidate?.code === "23505" ||
+                candidate?.cause?.code === "23505"
+              );
+            }
+          );
+
+          // Telemetry survives conversation deletion with a null link.
+          const [event] = await tx
+            .insert(aiEvents)
+            .values({
+              conversationId: conversation.id,
+              promptVersion: "integration",
+              modelRequested: "integration-test-model",
+            })
+            .returning();
+
+          // Deleting the conversation cascades to messages and assessments.
+          await tx
+            .delete(conversations)
+            .where(eq(conversations.id, conversation.id));
+
+          const leftoverMessages = await tx
+            .select({ id: messages.id })
+            .from(messages)
+            .where(eq(messages.conversationId, conversation.id));
+          assert.equal(leftoverMessages.length, 0);
+
+          const leftoverAssessments = await tx
+            .select({ id: assessments.id })
+            .from(assessments)
+            .where(eq(assessments.conversationId, conversation.id));
+          assert.equal(leftoverAssessments.length, 0);
+
+          const [survivingEvent] = await tx
+            .select()
+            .from(aiEvents)
+            .where(eq(aiEvents.id, event.id))
+            .limit(1);
+          assert.equal(survivingEvent.conversationId, null);
+
+          throw SENTINEL;
+        });
+      } catch (error) {
+        txError = error;
+      }
+
+      if (txError !== SENTINEL) {
+        if (txError) throw txError;
+        throw new Error("transaction did not roll back: sentinel was not thrown");
+      }
     } finally {
       await pool.end();
     }

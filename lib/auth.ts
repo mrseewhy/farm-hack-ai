@@ -1,7 +1,17 @@
 import { betterAuth } from "better-auth";
 import { Pool } from "pg";
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  // Fail predictably instead of holding a request open forever when the
+  // database is unreachable or a query stalls. Serverless instances are
+  // short-lived, so a small pool is enough.
+  max: 10,
+  connectionTimeoutMillis: 10_000,
+  idleTimeoutMillis: 30_000,
+  statement_timeout: 30_000,
+  query_timeout: 30_000,
+});
 
 export const auth = betterAuth({
   database: pool,

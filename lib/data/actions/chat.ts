@@ -12,7 +12,7 @@ import {
   aiEvents,
   knowledgeArticles,
 } from "@/lib/data/dal";
-import { eq, desc, and, inArray, ne } from "drizzle-orm";
+import { eq, desc, and, inArray, ne, sql, gte } from "drizzle-orm";
 import {
   createConversationSchema,
   createMessageSchema,
@@ -30,6 +30,11 @@ import {
 } from "@/lib/ai";
 import { buildAiEvent, logAiEvent, type AiEvent } from "@/lib/monitoring";
 import { formatGuidanceContext } from "@/lib/guidance";
+import {
+  assessmentWindowStart,
+  dailyAssessmentLimit,
+  isDailyAssessmentLimitReached,
+} from "@/lib/rate-limit";
 import { aiEventToRow } from "@/lib/data/ai-event-row";
 import { v2 as cloudinary } from "cloudinary";
 
@@ -445,6 +450,32 @@ export async function runAssessment(input: {
   );
   if (existing) return existing;
 
+  // Per-user abuse and cost control. This runs after the idempotency check so
+  // retrying an already-assessed message never consumes the allowance.
+  const limit = dailyAssessmentLimit();
+  const [{ count: recentAssessments }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(assessments)
+    .innerJoin(
+      conversations,
+      eq(assessments.conversationId, conversations.id)
+    )
+    .where(
+      and(
+        eq(conversations.userId, user.id),
+        gte(assessments.createdAt, assessmentWindowStart())
+      )
+    );
+
+  if (isDailyAssessmentLimitReached(Number(recentAssessments), limit)) {
+    console.warn(
+      `AI assessment limit reached for user ${user.id}: ${recentAssessments}/${limit} in the last 24 hours.`
+    );
+    throw new Error(
+      "Daily AI assessment limit reached. Please try again later."
+    );
+  }
+
   // Use the stored message text as the symptom evidence, not caller input.
   const symptoms = message[0].content;
 
@@ -493,7 +524,14 @@ export async function runAssessment(input: {
       sourceLicense: knowledgeArticles.sourceLicense,
     })
     .from(knowledgeArticles)
-    .where(eq(knowledgeArticles.status, "published"));
+    // Tomato is the only supported crop. Filtering on crop prevents guidance
+    // for a future crop from leaking into a tomato assessment.
+    .where(
+      and(
+        eq(knowledgeArticles.status, "published"),
+        eq(knowledgeArticles.crop, "tomato")
+      )
+    );
 
   const guidanceContext = formatGuidanceContext(guidanceArticles);
 

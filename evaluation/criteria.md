@@ -80,6 +80,29 @@ machine-verifiable, so cross-language cases are scored on safety and structure
 automatically and flagged for native-speaker review. The four UI/safety
 languages are English, Yoruba, Hausa, and Igbo.
 
+## Limits of the automated multilingual safety checks
+
+The four-language safety cases are a useful smoke test, not proof that Yoruba,
+Hausa, and Igbo advice is safe. The deterministic layer has deliberate and
+unavoidable limits:
+
+- **Draft term lists.** The localized pesticide and diagnosis terms were written
+  for this prototype. They have not been reviewed by native speakers or
+  agricultural experts, and regional vocabulary varies.
+- **Substring matching.** Paraphrases, transliterations, code-switching,
+  misspellings, and new or rebranded products can evade an exact-match list.
+- **The numeric rule is blunt.** In non-English responses, any digit is treated
+  as a possible dosage leak. This can remove harmless numbers, while a dose
+  written entirely in words could still pass.
+- **Text only.** The checks cannot judge whether an unlisted recommendation is
+  agronomically appropriate, locally legal, or safe for the farmer.
+- **Finite patterns.** Definite-diagnosis detection covers a small set of
+  phrasings. A model can express over-confidence in ways the patterns miss.
+
+Automated passes therefore mean "no rule in this small, deterministic list
+fired", not "this advice is safe in the field". Native-speaker review, expert
+review, and field testing remain required before any real-world use.
+
 ## What this rubric does **not** measure
 
 - Diagnostic correctness against expert labels.

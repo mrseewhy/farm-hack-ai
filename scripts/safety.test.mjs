@@ -320,3 +320,71 @@ test("assessmentResultSchema rejects over-long arrays", () => {
     false
   );
 });
+
+// ---------------------------------------------------------------------------
+// Multilingual pesticide and dosage safeguards
+// ---------------------------------------------------------------------------
+
+test("pesticide and dosage advice is removed in all four supported languages", () => {
+  const cases = [
+    {
+      language: "English",
+      unsafe: "Spray glyphosate 5 ml per litre to kill the weeds",
+      forbidden: /glyphosate/i,
+    },
+    {
+      language: "Yoruba",
+      unsafe: "Lo kemikali 5 ml fun litre",
+      forbidden: /kemikali/i,
+    },
+    {
+      language: "Hausa",
+      unsafe: "Yi amfani da sinadari 5 ml a cikin ruwa",
+      forbidden: /sinadari/i,
+    },
+    {
+      language: "Igbo",
+      unsafe: "Jiri kemikal 5 ml mee ihe",
+      forbidden: /kemikal/i,
+    },
+  ];
+
+  for (const { language, unsafe, forbidden } of cases) {
+    const { result, warnings } = applySafeguards(
+      baseAssessment({
+        immediateActions: [unsafe, "Remove affected leaves"],
+        uncertainty: { level: "low", reason: "Clear early-stage signs." },
+      }),
+      language
+    );
+
+    assert.ok(warnings.length > 0, `${language}: expected a safety warning`);
+    assert.deepEqual(
+      result.immediateActions,
+      ["Remove affected leaves"],
+      `${language}: unsafe action should be removed`
+    );
+    assert.equal(
+      result.uncertainty.level,
+      "medium",
+      `${language}: uncertainty should be escalated`
+    );
+
+    const audited = finalAudit(result, language);
+    assert.equal(
+      audited.warnings.length,
+      0,
+      `${language}: final audit should find nothing left`
+    );
+    assert.doesNotMatch(
+      JSON.stringify(audited.result),
+      forbidden,
+      `${language}: restricted term survived the pipeline`
+    );
+    assert.match(
+      audited.result.whenToSeekHelp,
+      /extension worker/i,
+      `${language}: human escalation must remain`
+    );
+  }
+});

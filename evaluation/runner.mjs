@@ -93,23 +93,44 @@ function toDataUrl(filePath, mime) {
  * Turn a case's image references into { secureUrl } entries. Returns the list
  * of missing asset ids so the caller can skip the case and report the gap.
  */
+function isHttpUrl(value) {
+  if (typeof value !== "string") return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function buildImages(refs, assets) {
   const missing = [];
   const images = [];
   for (const ref of refs) {
     const asset = assets.get(ref.assetId);
-    if (!asset || !asset.file) {
+    if (!asset) {
       missing.push(ref.assetId);
       continue;
     }
-    const filePath = join(EVAL_DIR, asset.file);
-    if (!existsSync(filePath)) {
-      missing.push(`${ref.assetId} (${asset.file} not found)`);
+    // A local file is turned into a data URL so normal replays are offline.
+    // An http(s)-only asset is left as a URL so the pipeline's fetch-failure
+    // path can be exercised deliberately (see "unreachable-image-url").
+    if (asset.file) {
+      const filePath = join(EVAL_DIR, asset.file);
+      if (!existsSync(filePath)) {
+        missing.push(`${ref.assetId} (${asset.file} not found)`);
+        continue;
+      }
+      images.push({
+        secureUrl: toDataUrl(filePath, asset.mime ?? extToMime(filePath)),
+      });
       continue;
     }
-    images.push({
-      secureUrl: toDataUrl(filePath, asset.mime ?? extToMime(filePath)),
-    });
+    if (isHttpUrl(asset.url)) {
+      images.push({ secureUrl: asset.url });
+      continue;
+    }
+    missing.push(ref.assetId);
   }
   return { images, missing };
 }
@@ -144,8 +165,16 @@ function validateCases(cases, assets) {
       problems.push(`${where}: missing expect object`);
     }
     for (const ref of caze.images ?? []) {
-      if (!assets.has(ref.assetId)) {
+      const asset = assets.get(ref.assetId);
+      if (!asset) {
         problems.push(`${where}: unknown image asset "${ref.assetId}"`);
+        continue;
+      }
+      const hasFile = typeof asset.file === "string" && asset.file.length > 0;
+      if (!hasFile && !isHttpUrl(asset.url)) {
+        problems.push(
+          `${where}: image asset "${ref.assetId}" has neither a local file nor an http(s) URL`
+        );
       }
     }
   }
@@ -316,6 +345,16 @@ async function main() {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const runPath = join(RUNS_DIR, `${timestamp}-${args.mode}-${args.config}.json`);
   const summary = summarize(results);
+  // The configured primary model is not necessarily the model that answered:
+  // replay uses cached responses and record mode may have fallen back. Record
+  // the models actually observed so a run can never be mislabelled.
+  const modelsUsed = [
+    ...new Set(
+      results
+        .filter((result) => result.status === "executed" && result.model)
+        .map((result) => result.model)
+    ),
+  ];
   writeFileSync(
     runPath,
     JSON.stringify(
@@ -323,6 +362,7 @@ async function main() {
         mode: args.mode,
         config: args.config,
         model: MODEL_NAME,
+        modelsUsed,
         note:
           args.mode === "selfcheck"
             ? "Self-check uses mock responses; validates harness plumbing only, not model quality."

@@ -95,9 +95,15 @@ Image cases reference an asset id, never a raw path:
 "images": [{ "assetId": "tomato-clear-01" }]
 ```
 
-The runner resolves ids through `images/manifest.json`. If an asset's `file` is
-`null` or missing, the case is **skipped** and the gap is reported — it is never
-silently counted as a pass.
+The runner resolves ids through `images/manifest.json`. An asset normally has a
+local `file`, which the runner turns into a data URL so replay stays offline. An
+asset may instead have `file: null` and an `http(s)` `url`; that is used for the
+fetch-failure fixture, which points at a blocked local port so it fails
+deterministically without external network access.
+
+If an asset has neither a local file nor an http(s) URL, the case is **skipped**
+and the gap is reported — it is never silently counted as a pass. Every asset
+must record `source`, `url`, `license`, `accessedAt`, and a description.
 
 ## Honesty rules for this harness
 

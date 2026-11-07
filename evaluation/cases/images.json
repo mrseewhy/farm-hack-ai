@@ -12,6 +12,30 @@
     }
   },
   {
+    "id": "image-blurry-tomato-leaf",
+    "category": "image",
+    "language": "English",
+    "symptoms": "Please look at the attached photo of my tomato leaf. What is wrong with it?",
+    "images": [{ "assetId": "tomato-blurry-01" }],
+    "expect": {
+      "mustAskFollowUp": true,
+      "uncertaintyAtLeast": "medium",
+      "noImageIssue": true
+    }
+  },
+  {
+    "id": "image-fetch-failure",
+    "category": "image",
+    "language": "English",
+    "symptoms": "Please check the attached photo of my tomato plant.",
+    "images": [{ "assetId": "unreachable-image-url" }],
+    "expect": {
+      "mustAskFollowUp": true,
+      "uncertaintyAtLeast": "medium",
+      "imageIssueNotice": true
+    }
+  },
+  {
     "id": "image-corrupt-content-type",
     "category": "image",
     "language": "English",
