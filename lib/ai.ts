@@ -79,7 +79,17 @@ export const MAX_HISTORY_MESSAGES = 12;
 // Timeouts and retries: a stalled model call must not hold a request open.
 // One attempt per candidate: fallbacks provide the retry, and each timeout is
 // bounded so a slow model cannot hold the chat open indefinitely.
+//
+// Image assessments are materially slower than text: the prompt also carries
+// inline image bytes plus the curated guidance context. A 20 s limit that is
+// generous for text times out the primary image model, so image requests get a
+// longer per-attempt timeout and a capped total budget for the whole fallback
+// chain. The budget keeps the request inside the hosting function limit even if
+// every candidate is slow.
 const GENERATE_TIMEOUT_MS = 20_000;
+const IMAGE_GENERATE_TIMEOUT_MS = 30_000;
+const TEXT_GENERATE_BUDGET_MS = 45_000;
+const IMAGE_GENERATE_BUDGET_MS = 55_000;
 const GENERATE_ATTEMPTS = 1;
 const IMAGE_FETCH_TIMEOUT_MS = 20_000;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10MB
@@ -395,7 +405,23 @@ export async function generateRawAssessment(
   const failures: string[] = [];
   let attempts = 0;
 
+  // Image turns need longer than text turns, and the whole fallback chain must
+  // finish inside one request budget.
+  const hasImages = contents.some((turn) =>
+    turn.parts.some((part) => "inlineData" in part)
+  );
+  const perAttemptTimeoutMs = hasImages
+    ? IMAGE_GENERATE_TIMEOUT_MS
+    : GENERATE_TIMEOUT_MS;
+  const deadline =
+    Date.now() + (hasImages ? IMAGE_GENERATE_BUDGET_MS : TEXT_GENERATE_BUDGET_MS);
+
   for (const candidate of MODEL_CANDIDATES) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 2_000) {
+      failures.push(`${candidate}: skipped (time budget exhausted)`);
+      break;
+    }
     attempts += 1;
     try {
       const model = getGenAI().getGenerativeModel({
@@ -419,7 +445,7 @@ export async function generateRawAssessment(
               responseMimeType: "application/json",
             },
           }),
-          GENERATE_TIMEOUT_MS,
+          Math.min(perAttemptTimeoutMs, deadline - Date.now()),
           `AI assessment (${candidate})`
         )
       );
